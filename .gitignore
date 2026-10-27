@@ -1,0 +1,20 @@
+# Terraform working directory (downloaded providers, regenerable with init)
+.terraform/
+
+# State files: contain resource IDs (!may hold secrets in plain text!)
+*.tfstate
+*.tfstate.*
+
+# Variable files: where real values are entered
+*.tfvars
+*.tfvars.json
+
+# Saved plan files (from terraform plan -out=...)
+tfplan
+*.tfplan
+
+# Terraform crash logs
+crash.log
+
+# Editor
+.vscode/
