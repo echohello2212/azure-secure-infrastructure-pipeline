@@ -35,4 +35,3 @@ resource "azurerm_subnet" "management_subnet" {
   virtual_network_name = azurerm_virtual_network.vnet_asip.name
   address_prefixes     = [var.management_subnet_prefix]
 }
-
