@@ -18,3 +18,8 @@ crash.log
 
 # Editor
 .vscode/
+
+#SSH keys
+asip_key*
+*.pem
+id_*
