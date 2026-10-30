@@ -39,9 +39,9 @@ variable "backend_subnet_prefix" {
   default     = "10.0.2.0/24"
 }
 
-#Management Subnet config
-variable "management_subnet_prefix" {
-  description = "The prefix for the management subnet."
+#Bastion Subnet config
+variable "bastion_subnet_prefix" {
+  description = "The prefix for the bastion subnet."
   type        = string
   default     = "10.0.3.0/24"
 }
