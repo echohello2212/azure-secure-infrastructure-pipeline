@@ -58,3 +58,9 @@ variable "subscription_id" {
   description = "The Azure subscription ID (GUID)."
   type        = string
 }
+
+#Admin IP entered as string for practical purposes of this lab
+variable "admin_ip" {
+  description = "The current public IP address of the admin workstation."
+  type        = string
+}
