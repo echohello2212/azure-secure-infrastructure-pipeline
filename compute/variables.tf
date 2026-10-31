@@ -1,9 +1,3 @@
-#Resource Group location
-variable "location" {
-  description = "The Azure region where the resources will be created."
-  type        = string
-}
-
 #Subscription ID. saved as env variable for replication and security purposes.
 variable "subscription_id" {
   description = "The Azure subscription ID (GUID)."
