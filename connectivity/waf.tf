@@ -7,7 +7,7 @@ resource "azurerm_web_application_firewall_policy" "waf_appgw" {
   #Detection logs matches without blocking, switched to Prevention after the first test
   policy_settings {
     enabled = true
-    mode    = "Detection"
+    mode    = "Prevention"
   }
 
   #Latest OWASP version the provider supports, pinned, Azure does not upgrade it (checked Nov 2026)
