@@ -69,6 +69,7 @@ resource "azurerm_application_gateway" "appgw_asip" {
   }
 
   #Health check, the gateway only sends traffic to a backend that returns 200-399
+  #Single site setup, 127.0.0.1 is the default probe host
   probe {
     name                = local.appgw_probe
     protocol            = "Http"
@@ -76,6 +77,7 @@ resource "azurerm_application_gateway" "appgw_asip" {
     interval            = 10
     timeout             = 10
     unhealthy_threshold = 3
+    host                = "127.0.0.1"
     match {
       status_code = ["200-399"]
     }
@@ -99,4 +101,3 @@ resource "azurerm_application_gateway" "appgw_asip" {
     priority                   = 100
   }
 }
-
