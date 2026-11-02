@@ -20,6 +20,8 @@ resource "azurerm_subnet" "frontend_subnet" {
   #reference the vnet name from the virtual network resource instead of as a variable
   virtual_network_name = azurerm_virtual_network.vnet_asip.name
   address_prefixes     = [var.frontend_subnet_prefix]
+  #No implicit internet access, a NAT gateway is needed for outbound traffic
+  default_outbound_access_enabled = false
 }
 
 resource "azurerm_subnet" "backend_subnet" {
@@ -27,6 +29,8 @@ resource "azurerm_subnet" "backend_subnet" {
   resource_group_name  = azurerm_resource_group.rg_asip.name
   virtual_network_name = azurerm_virtual_network.vnet_asip.name
   address_prefixes     = [var.backend_subnet_prefix]
+  #No implicit internet access, a NAT gateway AND explicit NSG rule are needed for outbound traffic
+  default_outbound_access_enabled = false
 }
 
 resource "azurerm_subnet" "bastion_subnet" {
