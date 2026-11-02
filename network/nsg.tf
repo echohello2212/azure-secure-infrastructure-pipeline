@@ -323,17 +323,7 @@ resource "azurerm_network_security_group" "nsg_appgw" {
   #Paste temporary rules beneath here. Should be cleared after each session
 
 
-  security_rule {
-    name                       = "Allow-Admin-HTTP-In"
-    priority                   = 1000
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "80"
-    source_address_prefix      = var.admin_ip
-    destination_address_prefix = "*"
-  }
+
 }
 
 resource "azurerm_subnet_network_security_group_association" "appgw_nsg_assoc" {
