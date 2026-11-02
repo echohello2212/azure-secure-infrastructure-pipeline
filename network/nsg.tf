@@ -313,9 +313,26 @@ resource "azurerm_network_security_group" "nsg_appgw" {
     access                     = "Allow"
     protocol                   = "Tcp"
     source_port_range          = "*"
-    destination_port_range     = "443"
+    destination_port_range     = "80"
     source_address_prefix      = "*"
     destination_address_prefix = azurerm_subnet.frontend_subnet.address_prefixes[0]
+  }
+
+
+  #TEMPORARY RULES
+  #Paste temporary rules beneath here. Should be cleared after each session
+
+
+  security_rule {
+    name                       = "Allow-Admin-HTTP-In"
+    priority                   = 1000
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "80"
+    source_address_prefix      = var.admin_ip
+    destination_address_prefix = "*"
   }
 }
 
