@@ -16,3 +16,8 @@ data "azurerm_subnet" "appgw" {
   virtual_network_name = "vnet-asip"
   resource_group_name  = data.azurerm_resource_group.rg.name
 }
+#Looks up the frontend NIC. Private IP, appgw's backend address. Compute must be deployed first
+data "azurerm_network_interface" "nic_frontend_1" {
+  name                = "nic-frontend-1"
+  resource_group_name = data.azurerm_resource_group.rg.name
+}
