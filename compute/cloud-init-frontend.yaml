@@ -1,0 +1,23 @@
+#cloud-config
+write_files:
+  - path: /etc/systemd/system/lab-web.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Minimal lab web server
+
+      [Service]
+      ExecStart=/usr/bin/python3 -m http.server 80 --directory /var/www/lab
+      Restart=on-failure
+      User=nobody
+      AmbientCapabilities=CAP_NET_BIND_SERVICE
+    
+      [Install]
+      WantedBy=multi-user.target
+
+
+runcmd:
+  - mkdir -p /var/www/lab
+  - hostname > /var/www/lab/index.html
+  - systemctl daemon-reload
+  - systemctl enable --now lab-web.service
