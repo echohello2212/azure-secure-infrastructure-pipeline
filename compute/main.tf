@@ -53,6 +53,7 @@ resource "azurerm_network_interface" "backend" {
 }
 
 #Frontend VMs, individual names from local.frontend_vms
+#Cloud-init file starts web server on port 80
 resource "azurerm_linux_virtual_machine" "frontend" {
   for_each                          = local.frontend_vms
   name                              = each.key
@@ -61,6 +62,7 @@ resource "azurerm_linux_virtual_machine" "frontend" {
   size                              = var.vm_size
   admin_username                    = var.admin_username
   vm_agent_platform_updates_enabled = true
+  custom_data                       = base64encode(file("${path.module}/cloud-init-frontend.yaml"))
 
   #Key login only
   disable_password_authentication = true
