@@ -17,6 +17,7 @@ data "azurerm_subnet" "appgw" {
   resource_group_name  = data.azurerm_resource_group.rg.name
 }
 #Looks up the frontend NIC. Private IP, appgw's backend address. Compute must be deployed first
+#Single NIC lookup. Scaling the frontend needs a for_each over the VM names so every NIC lands in the backend pool
 data "azurerm_network_interface" "nic_frontend_1" {
   name                = "nic-frontend-1"
   resource_group_name = data.azurerm_resource_group.rg.name
