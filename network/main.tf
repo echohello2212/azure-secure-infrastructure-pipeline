@@ -25,16 +25,16 @@ resource "azurerm_subnet" "frontend_subnet" {
 }
 
 #Create Backend Subnet
+#No implicit internet access, a NAT gateway AND explicit NSG rule are needed for outbound traffic
 resource "azurerm_subnet" "backend_subnet" {
-  name                 = "snet-backend"
-  resource_group_name  = azurerm_resource_group.rg_asip.name
-  virtual_network_name = azurerm_virtual_network.vnet_asip.name
-  address_prefixes     = [var.backend_subnet_prefix]
-  #No implicit internet access, a NAT gateway AND explicit NSG rule are needed for outbound traffic
+  name                            = "snet-backend"
+  resource_group_name             = azurerm_resource_group.rg_asip.name
+  virtual_network_name            = azurerm_virtual_network.vnet_asip.name
+  address_prefixes                = [var.backend_subnet_prefix]
   default_outbound_access_enabled = false
 }
 
-#Creae Bastion Host Subnet
+#Create Bastion Host Subnet
 resource "azurerm_subnet" "bastion_subnet" {
   name                 = "AzureBastionSubnet"
   resource_group_name  = azurerm_resource_group.rg_asip.name
