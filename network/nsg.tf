@@ -271,14 +271,15 @@ resource "azurerm_network_security_group" "nsg_appgw" {
     source_address_prefix      = "GatewayManager"
     destination_address_prefix = "*"
   }
+  #Front Door reaches the gateway over HTTP
   security_rule {
-    name                       = "Allow-HTTPS-Clients"
+    name                       = "Allow-HTTP-FrontDoor"
     priority                   = 110
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "Tcp"
     source_port_range          = "*"
-    destination_port_range     = "443"
+    destination_port_range     = "80"
     source_address_prefix      = "AzureFrontDoor.Backend"
     destination_address_prefix = "*"
   }
@@ -323,7 +324,7 @@ resource "azurerm_network_security_group" "nsg_appgw" {
   #Paste temporary rules beneath here. Should be cleared after each session
 
 
-
+  #TEMPORARY RULES END
 }
 
 resource "azurerm_subnet_network_security_group_association" "appgw_nsg_assoc" {
