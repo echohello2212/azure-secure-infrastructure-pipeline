@@ -1,0 +1,15 @@
+#Paste inside nsg_appgw in network/nsg.tf, then plan and apply
+#TODO: add X-Azure-FDID header check on the gateway to limit access to this Front Door only
+
+  #Front Door reaches the gateway over HTTP
+  security_rule {
+    name                       = "Allow-HTTP-FrontDoor"
+    priority                   = 500
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "80"
+    source_address_prefix      = "AzureFrontDoor.Backend"
+    destination_address_prefix = "*"
+  }
