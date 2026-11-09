@@ -12,8 +12,11 @@ terraform {
   }
 }
 #Azure RM provider configuration
+#Subscription ID for authentication set as variable for replication and security purposes
+#Storage access uses Entra ID instead of shared keys
 provider "azurerm" {
   features {}
-  #Subscription ID for authentication set as variable for replication and security purposes
-  subscription_id = var.subscription_id
+
+  subscription_id     = var.subscription_id
+  storage_use_azuread = true
 }
