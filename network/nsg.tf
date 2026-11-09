@@ -253,6 +253,54 @@ resource "azurerm_subnet_network_security_group_association" "bastion_nsg_assoc"
   network_security_group_id = azurerm_network_security_group.nsg_bastion.id
 }
 
+#NSG rules for Endpoints Subnet 
+resource "azurerm_network_security_group" "nsg_endpoints" {
+  name                = "nsg-endpoints"
+  location            = azurerm_resource_group.rg_asip.location
+  resource_group_name = azurerm_resource_group.rg_asip.name
+  #Inbound rules
+  security_rule {
+    name                       = "Allow-Backend-HTTPS"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = azurerm_subnet.backend_subnet.address_prefixes[0]
+    destination_address_prefix = "*"
+  }
+  security_rule {
+    name                       = "Deny-all-inbound"
+    priority                   = 4000
+    direction                  = "Inbound"
+    access                     = "Deny"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  #Outbound rules
+  security_rule {
+    name                       = "Deny-All-Outbound"
+    priority                   = 4000
+    direction                  = "Outbound"
+    access                     = "Deny"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+
+resource "azurerm_subnet_network_security_group_association" "endpoints_nsg_assoc" {
+  subnet_id                 = azurerm_subnet.endpoints_subnet.id
+  network_security_group_id = azurerm_network_security_group.nsg_endpoints.id
+}
+
 #NSG rules for application gateway subnet 
 resource "azurerm_network_security_group" "nsg_appgw" {
   name                = "nsg-appgw"
