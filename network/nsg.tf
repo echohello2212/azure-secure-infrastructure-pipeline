@@ -98,8 +98,9 @@ resource "azurerm_network_security_group" "nsg_backend" {
     source_address_prefix      = "*"
     destination_address_prefix = "AzureMonitor"
   }
+  #Backend reaches Blob Storage via Endpoints
   security_rule {
-    name                       = "Allow-Storage-Out"
+    name                       = "Allow-Endpoints-Out"
     priority                   = 110
     direction                  = "Outbound"
     access                     = "Allow"
@@ -107,7 +108,7 @@ resource "azurerm_network_security_group" "nsg_backend" {
     source_port_range          = "*"
     destination_port_range     = "443"
     source_address_prefix      = "*"
-    destination_address_prefix = "Storage"
+    destination_address_prefix = azurerm_subnet.endpoints_subnet.address_prefixes[0]
   }
   security_rule {
     name                       = "Allow-Backup-Out"
