@@ -1,8 +1,8 @@
 #Public IP for Bastion access. Standard SKU requires Static allocation
 resource "azurerm_public_ip" "bastion" {
   name                = "pip-bastion"
-  location            = data.azurerm_resource_group.rg.location
-  resource_group_name = data.azurerm_resource_group.rg.name
+  location            = data.azurerm_resource_group.rg_asip.location
+  resource_group_name = data.azurerm_resource_group.rg_asip.name
   sku                 = "Standard"
   allocation_method   = "Static"
 }
@@ -10,8 +10,8 @@ resource "azurerm_public_ip" "bastion" {
 #Bastion host for SSH to the VMs. Basic SKU since only portal access is needed
 resource "azurerm_bastion_host" "bastion" {
   name                = "bas-asip"
-  location            = data.azurerm_resource_group.rg.location
-  resource_group_name = data.azurerm_resource_group.rg.name
+  location            = data.azurerm_resource_group.rg_asip.location
+  resource_group_name = data.azurerm_resource_group.rg_asip.name
   sku                 = "Basic"
 
   ip_configuration {

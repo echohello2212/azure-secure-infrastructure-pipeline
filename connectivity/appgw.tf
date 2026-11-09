@@ -13,8 +13,8 @@ locals {
 #Public IP for the application gateway, Standard SKU. Static allocation required
 resource "azurerm_public_ip" "pip_appgw" {
   name                = "pip-appgw"
-  location            = data.azurerm_resource_group.rg.location
-  resource_group_name = data.azurerm_resource_group.rg.name
+  location            = data.azurerm_resource_group.rg_asip.location
+  resource_group_name = data.azurerm_resource_group.rg_asip.name
   sku                 = "Standard"
   allocation_method   = "Static"
 }
@@ -23,8 +23,8 @@ resource "azurerm_public_ip" "pip_appgw" {
 #Policy ID attaches the WAF policy defined in waf.tf
 resource "azurerm_application_gateway" "appgw_asip" {
   name                = "appgw-asip"
-  location            = data.azurerm_resource_group.rg.location
-  resource_group_name = data.azurerm_resource_group.rg.name
+  location            = data.azurerm_resource_group.rg_asip.location
+  resource_group_name = data.azurerm_resource_group.rg_asip.name
   firewall_policy_id  = azurerm_web_application_firewall_policy.waf_appgw.id
 
   #Fixed capacity of 1 to keep costs low, autoscaling would replace it in production
