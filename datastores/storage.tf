@@ -41,7 +41,7 @@ resource "azurerm_private_endpoint" "pe_blob" {
   name                = "pe-blob"
   resource_group_name = data.azurerm_resource_group.rg_asip.name
   location            = data.azurerm_resource_group.rg_asip.location
-  subnet_id           = data.azurerm_subnet.snet_endpoints.id
+  subnet_id           = data.azurerm_subnet.endpoints_subnet.id
 
   private_service_connection {
     name                           = "pe-blob-psc"

@@ -2,7 +2,7 @@ data "azurerm_resource_group" "rg_asip" {
   name = "rg-asip"
 }
 
-data "azurerm_subnet" "snet_endpoints" {
+data "azurerm_subnet" "endpoints_subnet" {
   name                 = "snet-endpoints"
   virtual_network_name = "vnet-asip"
   resource_group_name  = data.azurerm_resource_group.rg_asip.name
