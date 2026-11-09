@@ -75,4 +75,9 @@ variable "subscription_id" {
 variable "admin_ip" {
   description = "The current public IP address of the admin workstation."
   type        = string
+  #Validation accepts only plain IPv4 address and rejects CIDR notation etc
+  validation {
+    condition     = can(regex("^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$", var.admin_ip))
+    error_message = "admin_ip must be a valid IPv4 address."
+  }
 }
