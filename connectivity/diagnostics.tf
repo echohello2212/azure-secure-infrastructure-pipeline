@@ -5,7 +5,7 @@ resource "azurerm_monitor_diagnostic_setting" "diag_appgw" {
   log_analytics_workspace_id     = data.azurerm_log_analytics_workspace.log_asip.id
   log_analytics_destination_type = "Dedicated"
 
-  #WAF log, shows rules matched and blocked
+  #WAF log, shows rules matched and actions taken
   enabled_log {
     category = "ApplicationGatewayFirewallLog"
   }
