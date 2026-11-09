@@ -13,7 +13,7 @@ resource "azurerm_virtual_network" "vnet_asip" {
   resource_group_name = azurerm_resource_group.rg_asip.name
 }
 
-#Create Azure Subnets
+#Create Frontend Subnet
 resource "azurerm_subnet" "frontend_subnet" {
   name                = "snet-frontend"
   resource_group_name = azurerm_resource_group.rg_asip.name
@@ -24,6 +24,7 @@ resource "azurerm_subnet" "frontend_subnet" {
   default_outbound_access_enabled = false
 }
 
+#Create Backend Subnet
 resource "azurerm_subnet" "backend_subnet" {
   name                 = "snet-backend"
   resource_group_name  = azurerm_resource_group.rg_asip.name
@@ -33,6 +34,7 @@ resource "azurerm_subnet" "backend_subnet" {
   default_outbound_access_enabled = false
 }
 
+#Creae Bastion Host Subnet
 resource "azurerm_subnet" "bastion_subnet" {
   name                 = "AzureBastionSubnet"
   resource_group_name  = azurerm_resource_group.rg_asip.name
@@ -40,6 +42,7 @@ resource "azurerm_subnet" "bastion_subnet" {
   address_prefixes     = [var.bastion_subnet_prefix]
 }
 
+#Create Application Gateway Subnet
 resource "azurerm_subnet" "appgw_subnet" {
   name                 = "snet-appgw"
   resource_group_name  = azurerm_resource_group.rg_asip.name
@@ -47,6 +50,7 @@ resource "azurerm_subnet" "appgw_subnet" {
   address_prefixes     = [var.appgw_subnet_prefix]
 }
 
+#Create Private Endpoint Subnet
 resource "azurerm_subnet" "endpoints_subnet" {
   name                              = "snet-endpoints"
   resource_group_name               = azurerm_resource_group.rg_asip.name
@@ -55,3 +59,17 @@ resource "azurerm_subnet" "endpoints_subnet" {
   private_endpoint_network_policies = "Enabled"
 }
 
+#Private DNS zone for blob storage, resolves the storage name to the private endpoint
+resource "azurerm_private_dns_zone" "blob" {
+  name                = "privatelink.blob.core.windows.net"
+  resource_group_name = azurerm_resource_group.rg_asip.name
+}
+
+#Links the blob zone to the VNet. No registration, the private endpoint creates the record
+resource "azurerm_private_dns_zone_virtual_network_link" "vnet_link_blob" {
+  name                  = "vnet-link-blob"
+  resource_group_name   = azurerm_resource_group.rg_asip.name
+  private_dns_zone_name = azurerm_private_dns_zone.blob.name
+  virtual_network_id    = azurerm_virtual_network.vnet_asip.id
+  registration_enabled  = false
+}
