@@ -343,8 +343,9 @@ resource "azurerm_network_security_group" "nsg_appgw" {
   }
 
   #Outbound rules
+  #Gateway sends to its backend pool, which is the frontend subnet
   security_rule {
-    name                       = "Allow-backend-out"
+    name                       = "Allow-Frontend-Out"
     priority                   = 100
     direction                  = "Outbound"
     access                     = "Allow"
