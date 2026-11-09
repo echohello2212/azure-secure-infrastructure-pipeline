@@ -53,6 +53,13 @@ variable "appgw_subnet_prefix" {
   default     = "10.0.4.0/24"
 }
 
+#Endpoints Subnet config
+variable "endpoints_subnet_prefix" {
+  description = "The prefix for the endpoints subnet."
+  type        = string
+  default     = "10.0.5.0/24"
+}
+
 #Subscription ID. saved as env variable for replication and security purposes.
 variable "subscription_id" {
   description = "The Azure subscription ID (GUID)."

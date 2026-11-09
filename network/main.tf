@@ -47,3 +47,11 @@ resource "azurerm_subnet" "appgw_subnet" {
   address_prefixes     = [var.appgw_subnet_prefix]
 }
 
+resource "azurerm_subnet" "endpoints_subnet" {
+  name                              = "snet-endpoints"
+  resource_group_name               = azurerm_resource_group.rg_asip.name
+  virtual_network_name              = azurerm_virtual_network.vnet_asip.name
+  address_prefixes                  = [var.endpoints_subnet_prefix]
+  private_endpoint_network_policies = "Enabled"
+}
+
