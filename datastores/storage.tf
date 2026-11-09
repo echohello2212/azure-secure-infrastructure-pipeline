@@ -35,3 +35,23 @@ resource "azurerm_storage_account" "sa_asip" {
     prevent_destroy = true
   }
 }
+
+#Private endpoint for blob storage in the endpoints subnet, registers its record in the blob DNS zone.
+resource "azurerm_private_endpoint" "pe_blob" {
+  name                = "pe-blob"
+  resource_group_name = data.azurerm_resource_group.rg_asip.name
+  location            = data.azurerm_resource_group.rg_asip.location
+  subnet_id           = data.azurerm_subnet.snet_endpoints.id
+
+  private_service_connection {
+    name                           = "pe-blob-psc"
+    private_connection_resource_id = azurerm_storage_account.sa_asip.id
+    is_manual_connection           = false
+    subresource_names              = ["blob"]
+  }
+
+  private_dns_zone_group {
+    name                 = "pe-blob-dzg"
+    private_dns_zone_ids = [data.azurerm_private_dns_zone.blob.id]
+  }
+}
