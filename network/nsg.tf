@@ -271,18 +271,6 @@ resource "azurerm_network_security_group" "nsg_appgw" {
     source_address_prefix      = "GatewayManager"
     destination_address_prefix = "*"
   }
-  #Front Door reaches the gateway over HTTP
-  security_rule {
-    name                       = "Allow-HTTP-FrontDoor"
-    priority                   = 110
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "80"
-    source_address_prefix      = "AzureFrontDoor.Backend"
-    destination_address_prefix = "*"
-  }
   security_rule {
     name                       = "Allow-AzureLoadBalancer"
     priority                   = 120
