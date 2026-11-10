@@ -9,6 +9,7 @@ Built for ease: copy, paste and resume. Everything is in order, so you can pick 
 - [Environment variables](#environment-variables)
 - [Azure checks](#azure-checks)
 - [Verify the gateway](#verify-the-gateway)
+- [Verify the endpoints](#verify-the-endpoints)
 - [Verify the private path](#verify-the-private-path)
 - [Changing WAF mode](#changing-waf-mode)
 - [Temporary NSG rules](#temporary-nsg-rules)
@@ -38,8 +39,9 @@ Built for ease: copy, paste and resume. Everything is in order, so you can pick 
 4. `compute/`, same steps.
 5. `connectivity/`, same steps. It looks up the frontend NIC, so `compute/` must be up first. The gateway takes 10-20 minutes.
 6. [Verify the gateway](#verify-the-gateway).
-7. [Verify the private path](#verify-the-private-path).
-8. Add any [temporary rules](#temporary-nsg-rules) last.
+7. [Verify the endpoints](#verify-the-endpoints).
+8. [Verify the private path](#verify-the-private-path).
+9. Add any [temporary rules](#temporary-nsg-rules) last.
 
 `frontdoor/` is not part of the order. It is validated only, see [Front Door](#front-door).
 
@@ -54,7 +56,7 @@ Built for ease: copy, paste and resume. Everything is in order, so you can pick 
 az resource list --resource-group rg-asip --output table
 ```
 
-`network/` and `datastores/` stay deployed. The VNet, subnets, NSGs, DNS zone, workspace, storage account and endpoint cost almost nothing, and the ones that hold data are protected on purpose.
+`network/` and `datastores/` stay deployed. The VNet, subnets, NSGs, DNS zones, workspace, storage account, SQL server and database, endpoints and Defender settings cost little (the serverless database pauses when idle), and the ones that hold data are protected on purpose.
 
 ## Environment variables
 
@@ -67,6 +69,7 @@ $env:TF_VAR_subscription_id = (az account show --query id -o tsv)
 $env:TF_VAR_location = "<azure-region>"
 $env:TF_VAR_admin_ip = "<your-public-ip>"
 $env:TF_VAR_ssh_public_key_path = "<path-to-public-key>"
+$env:TF_VAR_sql_admin_login = (az ad signed-in-user show --query userPrincipalName -o tsv)
 ```
 
 **Bash**
@@ -76,6 +79,7 @@ export TF_VAR_subscription_id=$(az account show --query id -o tsv)
 export TF_VAR_location="<azure-region>"
 export TF_VAR_admin_ip="<your-public-ip>"
 export TF_VAR_ssh_public_key_path="<path-to-public-key>"
+export TF_VAR_sql_admin_login=$(az ad signed-in-user show --query userPrincipalName -o tsv)
 ```
 
 ### Admin IP
@@ -86,16 +90,23 @@ export TF_VAR_ssh_public_key_path="<path-to-public-key>"
 - **It might change** (router restart, new network, VPN). If Bastion or the gateway stops answering, update the variable and re-apply `network/` (and `datastores/` if storage access is on).
 - Never commit the real value.
 
+### SQL admin login
+
+`TF_VAR_sql_admin_login` is the Entra login of the SQL admin. It is personal, so it is read from your sign-in at runtime and never committed. Terraform still stores it in state, which is protected.
+
 ## Azure checks
 
 ```
 az account show --query "{name:name, state:state}" -o table
 az vm list-skus --location <azure-region> --size <vm-size> --output table
+az security pricing list --query "value[].{name:name, tier:pricingTier}" -o table
 ```
 
 - Confirm the right subscription is active.
 - Confirm `TF_VAR_admin_ip` matches your current public IP.
 - VM size availability differs per subscription. Look for `NotAvailableForSubscription` before applying.
+- Every Defender plan should show `Free`, except `Discovery` and `FoundationalCspm`. Those two are the platform-managed baseline and cost nothing.
+- **If a command fails with an MFA error,** sign in again with `az login --tenant <tenant-id>`. If Terraform still complains about the state storage, add `--scope https://storage.azure.com/.default`. Use `--use-device-code` if no browser opens.
 
 ## Verify the gateway
 
@@ -119,6 +130,33 @@ curl.exe -i "http://<gateway-ip>/?id=1' OR '1'='1"
 ```
 
 A normal request returns `200`. In Prevention mode the second returns `403`.
+
+## Verify the endpoints
+
+Each private endpoint's connection should be approved:
+
+```
+az network private-endpoint show --name pe-blob --resource-group rg-asip --query "privateLinkServiceConnections[].privateLinkServiceConnectionState.status" -o tsv
+az network private-endpoint show --name pe-sql --resource-group rg-asip --query "privateLinkServiceConnections[].privateLinkServiceConnectionState.status" -o tsv
+```
+
+Expected: `Approved` for both. Anything else means the endpoint is not usable.
+
+The storage account's public path should be closed:
+
+```
+az storage account show --name <storage-account> --resource-group rg-asip --query "{public:publicNetworkAccess, default:networkRuleSet.defaultAction}" -o json
+```
+
+Expected: `Disabled` and `Deny`.
+
+The container exists and is private. This lists it through the management plane, so it works with the public path closed:
+
+```
+az storage container-rm list --storage-account <storage-account> --resource-group rg-asip --output table
+```
+
+Expected: the container, with `PublicAccess` of `None`.
 
 ## Verify the private path
 
@@ -203,14 +241,17 @@ $env:TF_VAR_storage_public_access = "false"
 
 ## Removing prevent_destroy
 
-Two resources are protected on purpose:
+Five resources hold data or the audit trail and are protected on purpose:
 
 | Resource | File |
 |---|---|
 | Log Analytics workspace | `network/logging.tf` |
 | Storage account | `datastores/storage.tf` |
+| Blob container | `datastores/storage.tf` |
+| SQL server | `datastores/sql.tf` |
+| SQL database | `datastores/sql.tf` |
 
-To destroy one: set `prevent_destroy = false` in its `lifecycle` block, then run the destroy. Put it back to `true` after a rebuild.
+To destroy one: set `prevent_destroy = false` in its `lifecycle` block, then run the destroy. Put it back to `true` after a rebuild. A parent takes its children with it, so remove the flag on both the storage account and its container, or on both the SQL server and its database.
 
 `prevent_destroy` only guards Terraform. Deleting in the portal bypasses it.
 
