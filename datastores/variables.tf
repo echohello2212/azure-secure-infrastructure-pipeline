@@ -25,3 +25,9 @@ variable "storage_public_access" {
   type        = bool
   default     = false
 }
+
+variable "sql_admin_login" {
+  description = "The Azure AD login name of the SQL admin user."
+  type        = string
+  sensitive   = true
+}
