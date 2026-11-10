@@ -87,17 +87,6 @@ resource "azurerm_network_security_group" "nsg_backend" {
   }
 
   #Outbound rules
-  security_rule {
-    name                       = "Allow-Monitor-Out"
-    priority                   = 100
-    direction                  = "Outbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "443"
-    source_address_prefix      = "*"
-    destination_address_prefix = "AzureMonitor"
-  }
   #Backend reaches Blob Storage via Endpoints
   security_rule {
     name                       = "Allow-Endpoints-Out"
@@ -121,17 +110,6 @@ resource "azurerm_network_security_group" "nsg_backend" {
     destination_port_range     = "1433"
     source_address_prefix      = "*"
     destination_address_prefix = azurerm_subnet.endpoints_subnet.address_prefixes[0]
-  }
-  security_rule {
-    name                       = "Allow-Backup-Out"
-    priority                   = 130
-    direction                  = "Outbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "443"
-    source_address_prefix      = "*"
-    destination_address_prefix = "AzureBackup"
   }
   security_rule {
     name                       = "Deny-all-outbound"
