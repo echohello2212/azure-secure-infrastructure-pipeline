@@ -1,89 +1,170 @@
 # Quickstart
- 
-Built for ease: copy, paste and resume. Everything is in order, so you can pick up a session without re-reading the whole project. Setup and architecture are in the [README](../README.md).
- 
+
+Built for ease: copy, paste and resume. Everything is in order, so you can pick up a session without re-reading the whole project. Setup, architecture and reasoning are in the [README](../README.md).
+
 ## Contents
- 
+
 - [Best practice](#best-practice)
 - [Order of operations](#order-of-operations)
 - [Environment variables](#environment-variables)
 - [Azure checks](#azure-checks)
+- [Verify the gateway](#verify-the-gateway)
+- [Verify the private path](#verify-the-private-path)
+- [Changing WAF mode](#changing-waf-mode)
 - [Temporary NSG rules](#temporary-nsg-rules)
+- [Temporary storage access](#temporary-storage-access)
+- [Removing prevent_destroy](#removing-prevent_destroy)
+- [Querying the logs](#querying-the-logs)
+- [Front Door](#front-door)
+
 ## Best practice
- 
+
 - **Read every plan before applying.** A passing plan is not a passing apply.
+- **Check the folder and the diff.** The prompt must show the root you mean, and `git diff` shows what you are about to change. A result from the wrong folder says nothing.
+- **After copying a root or a block, change what must change.** State key, names, variables. Then `fmt`, `validate` and `plan`, and read the result.
 - **One change per commit.** Stage by path and check `git diff --cached --stat`.
 - **Redact before pasting.** No subscription IDs, IPs or resource IDs in commits, issues or shared output.
 - **Keep state out of the repo.** State and saved plans can contain secrets.
 - **A second `plan` should say `No changes`.** Anything else is drift or a bug.
-- **Costly resources bill while they exist.** The gateway and Bastion cost money every hour they are left running, so destroy them the same day.
+- **Costly resources bill while they exist.** The gateway, Bastion and VMs cost money every hour they are left running, so destroy them the same day.
+
 ## Order of operations
- 
+
 **Startup**
- 
+
 1. Sign in and set the [environment variables](#environment-variables).
 2. Run the [Azure checks](#azure-checks).
-3. `network/`, then `compute/`, then `connectivity/`. In each: `init`, `fmt`, `validate`, `plan`, `apply`. If `network/` is still deployed, `plan` should say `No changes`, and you can move on.
-4. `connectivity/` looks up the frontend NIC, so `compute/` must be up first.
-5. Add any [temporary rules](#temporary-nsg-rules) last.
+3. `network/`, then `datastores/`. In each: `init`, `fmt`, `validate`, `plan`, `apply`. If they are still deployed, `plan` should say `No changes`, and you can move on.
+4. `compute/`, same steps.
+5. `connectivity/`, same steps. It looks up the frontend NIC, so `compute/` must be up first. The gateway takes 10-20 minutes.
+6. [Verify the gateway](#verify-the-gateway).
+7. [Verify the private path](#verify-the-private-path).
+8. Add any [temporary rules](#temporary-nsg-rules) last.
+
+`frontdoor/` is not part of the order. It is validated only, see [Front Door](#front-door).
+
 **Teardown**
- 
-1. Clear the temporary rules and `apply` in `network/`.
+
+1. Clear the temporary rules and `apply` in `network/`. If you switched on [temporary storage access](#temporary-storage-access), switch it off and `apply` in `datastores/`.
 2. `connectivity/` destroy first (the gateway takes 10-20 minutes).
 3. `compute/` destroy.
-4. Verify nothing is left:
+4. Verify only the long-lived resources are left:
+
 ```
 az resource list --resource-group rg-asip --output table
 ```
- 
-Only network resources should remain. `network/` can stay deployed. The VNet, subnets and NSGs don't bill, so there's no reason to destroy it between sessions.
- 
+
+`network/` and `datastores/` stay deployed. The VNet, subnets, NSGs, DNS zone, workspace, storage account and endpoint cost almost nothing, and the ones that hold data are protected on purpose.
+
 ## Environment variables
- 
+
 Nothing environment-specific is stored in the repo. Set these per session.
- 
+
 **PowerShell**
+
 ```powershell
 $env:TF_VAR_subscription_id = (az account show --query id -o tsv)
 $env:TF_VAR_location = "<azure-region>"
 $env:TF_VAR_admin_ip = "<your-public-ip>"
 $env:TF_VAR_ssh_public_key_path = "<path-to-public-key>"
 ```
- 
+
 **Bash**
+
 ```bash
 export TF_VAR_subscription_id=$(az account show --query id -o tsv)
 export TF_VAR_location="<azure-region>"
 export TF_VAR_admin_ip="<your-public-ip>"
 export TF_VAR_ssh_public_key_path="<path-to-public-key>"
 ```
- 
+
 ### Admin IP
- 
-`TF_VAR_admin_ip` is the public IP that Bastion (and the temporary gateway rule) accepts.
- 
+
+`TF_VAR_admin_ip` is the public IP that Bastion, the temporary gateway rule and the storage firewall accept.
+
 - Find yours with any "what is my IP" site, or `curl https://api.ipify.org`.
-- **It might change** (router restart, new network, VPN). If Bastion or the gateway stops answering, update the variable and re-apply `network/`.
-- The IP is used in `nsg-bastion` and the temporary rule, so both pick up the new value on `apply`.
+- **It might change** (router restart, new network, VPN). If Bastion or the gateway stops answering, update the variable and re-apply `network/` (and `datastores/` if storage access is on).
 - Never commit the real value.
+
 ## Azure checks
- 
+
 ```
 az account show --query "{name:name, state:state}" -o table
 az vm list-skus --location <azure-region> --size <vm-size> --output table
 ```
- 
+
 - Confirm the right subscription is active.
 - Confirm `TF_VAR_admin_ip` matches your current public IP.
 - VM size availability differs per subscription. Look for `NotAvailableForSubscription` before applying.
+
+## Verify the gateway
+
+Backend health (wait for `Healthy`):
+
+```
+az network application-gateway show-backend-health --name appgw-asip --resource-group rg-asip --query "backendAddressPools[].backendHttpSettingsCollection[].servers[].health" -o tsv
+```
+
+Gateway address:
+
+```
+az network public-ip show --name pip-appgw --resource-group rg-asip --query ipAddress -o tsv
+```
+
+The gateway accepts no public traffic by default. Add the [temporary rule](#temporary-nsg-rules) first, then test (use `curl.exe` in PowerShell, `curl` is an alias):
+
+```
+curl.exe -i http://<gateway-ip>/
+curl.exe -i "http://<gateway-ip>/?id=1' OR '1'='1"
+```
+
+A normal request returns `200`. In Prevention mode the second returns `403`.
+
+## Verify the private path
+
+Checks that only the backend can reach the storage account, and that it does so privately. Connect to each VM through Bastion. Select the **private** key file, not the `.pub`, or Bastion rejects it.
+
+On both VMs, DNS first:
+
+```
+nslookup <storage-account>.blob.core.windows.net
+```
+
+Both should return an address in the endpoints subnet (`10.0.5.0/24`), because the private DNS zone is linked to the whole VNet. DNS is not access control, so the frontend resolves it too.
+
+Then the connection, on each VM:
+
+```
+curl -sS -m 10 "https://<storage-account>.blob.core.windows.net/?comp=list"
+```
+
+| VM | Expected | Meaning |
+|---|---|---|
+| `backend-1` | An XML error body with an authentication or authorization code | The network path works and the service refuses the unauthenticated request |
+| `frontend-1` | Timeout, `curl: (28)` | `nsg-endpoints` drops the packet, the service never answers |
+
+- **Use a valid request.** A bare account URL returns `400 InvalidQueryParameterValue` (empty `comp`) from anywhere, so it says nothing about access.
+- **Read the `<Code>` in the body.** It shows which check rejected the request. Keep request IDs out of anything committed.
+- **To get a `200`,** the VM needs a managed identity with a data role on the account. This is not set up.
+
+## Changing WAF mode
+
+The mode is set in the gateway's WAF policy (`connectivity/waf.tf`).
+
+- **Detection** logs matches and lets the request through. It is invisible without the [diagnostic logs](#querying-the-logs).
+- **Prevention** blocks matches with `403`.
+
+After applying a change, **wait 3-5 minutes** before testing. The new mode is not instant.
+
 ## Temporary NSG rules
- 
-For testing access only, such as admin IP to the gateway on port 80.
- 
+
+For testing access only, such as admin IP to the gateway on port 80. Only `nsg_appgw` has a marker.
+
 1. Copy the entire rule below.
-2. Paste it at the bottom of the `nsg_appgw` block in `network/nsg.tf`, beneath the `#TEMPORARY RULES` tag, before the resource's closing brace.
+2. Paste it at the bottom of the `nsg_appgw` block in `network/nsg.tf`, beneath the `#TEMPORARY RULES` tag, before the `#TEMPORARY RULES END` marker.
 3. `plan`, check, `apply`.
 4. After the session, delete everything beneath the tag and `apply` again.
+
 ```terraform
   security_rule {
     name                       = "Allow-Admin-HTTP-In"
@@ -97,6 +178,64 @@ For testing access only, such as admin IP to the gateway on port 80.
     destination_address_prefix = "*"
   }
 ```
- 
+
 - Use priority 1000 and up. Permanent rules use 100-4000 in steps of 10.
 - Don't use a separate `azurerm_network_security_rule` resource. The inline rules overwrite it.
+- **Another NSG:** add the same marker and a rule at 1000 or higher, and remove both afterwards.
+
+## Temporary storage access
+
+The storage account has no public access by default. To reach it from your computer:
+
+1. Set the switch for the session:
+
+```powershell
+$env:TF_VAR_storage_public_access = "true"
+```
+
+2. `plan`, check, `apply` in `datastores/`. Only the admin IP is allowed through the storage firewall.
+3. Shared keys are off, so data access needs a role on your own identity (for example Storage Blob Data Contributor).
+4. When done, set it back and apply again:
+
+```powershell
+$env:TF_VAR_storage_public_access = "false"
+```
+
+## Removing prevent_destroy
+
+Two resources are protected on purpose:
+
+| Resource | File |
+|---|---|
+| Log Analytics workspace | `network/logging.tf` |
+| Storage account | `datastores/storage.tf` |
+
+To destroy one: set `prevent_destroy = false` in its `lifecycle` block, then run the destroy. Put it back to `true` after a rebuild.
+
+`prevent_destroy` only guards Terraform. Deleting in the portal bypasses it.
+
+## Querying the logs
+
+The diagnostic setting sends gateway logs to dedicated tables in the workspace. Open the workspace in the portal, then Logs:
+
+```
+AGWFirewallLogs
+| take 20
+```
+
+```
+AGWAccessLogs
+| take 20
+```
+
+Logs can take a few minutes to appear after a request.
+
+## Front Door
+
+`frontdoor/` is written and validated, but not tested or deployed. To try it on a paid subscription:
+
+1. Deploy `connectivity/`.
+2. Paste the rule from `frontdoor/nsg_rule.tf.example` into `nsg_appgw` in `network/nsg.tf` and `apply`.
+3. `apply` in `frontdoor/`.
+
+**Not included:** an `X-Azure-FDID` header check. The service tag in the NSG rule covers every customer's Front Door, so the gateway should also block requests whose `X-Azure-FDID` header does not match your own Front Door profile's ID. That is a custom rule on the gateway's WAF policy. The ID only exists after deployment, so check the profile's exported attribute name in the provider documentation.
