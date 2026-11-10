@@ -36,7 +36,7 @@ resource "azurerm_storage_account" "sa_asip" {
   }
 }
 
-#Private endpoint for blob storage in the endpoints subnet, registers its record in the blob DNS zone.
+#Private endpoint for blob storage in the endpoints subnet, registers its record in the blob DNS zone
 resource "azurerm_private_endpoint" "pe_blob" {
   name                = "pe-blob"
   resource_group_name = data.azurerm_resource_group.rg_asip.name
@@ -53,5 +53,16 @@ resource "azurerm_private_endpoint" "pe_blob" {
   private_dns_zone_group {
     name                 = "pe-blob-dzg"
     private_dns_zone_ids = [data.azurerm_private_dns_zone.blob.id]
+  }
+}
+#Private container for backend documents, No public access
+resource "azurerm_storage_container" "blob_asip" {
+  name                  = "blob-asip"
+  storage_account_id    = azurerm_storage_account.sa_asip.id
+  container_access_type = "private"
+
+  #Prevent accidental deletion
+  lifecycle {
+    prevent_destroy = true
   }
 }
