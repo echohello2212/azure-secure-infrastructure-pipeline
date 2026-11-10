@@ -110,9 +110,21 @@ resource "azurerm_network_security_group" "nsg_backend" {
     source_address_prefix      = "*"
     destination_address_prefix = azurerm_subnet.endpoints_subnet.address_prefixes[0]
   }
+  #Backend reaches SQL via Endpoints
+  security_rule {
+    name                       = "Allow-SQL-Out"
+    priority                   = 120
+    direction                  = "Outbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "1433"
+    source_address_prefix      = "*"
+    destination_address_prefix = azurerm_subnet.endpoints_subnet.address_prefixes[0]
+  }
   security_rule {
     name                       = "Allow-Backup-Out"
-    priority                   = 120
+    priority                   = 130
     direction                  = "Outbound"
     access                     = "Allow"
     protocol                   = "Tcp"
@@ -268,6 +280,18 @@ resource "azurerm_network_security_group" "nsg_endpoints" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "443"
+    source_address_prefix      = azurerm_subnet.backend_subnet.address_prefixes[0]
+    destination_address_prefix = "*"
+  }
+  #Receive Backend SQL traffic
+  security_rule {
+    name                       = "Allow-SQL-In"
+    priority                   = 120
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "1433"
     source_address_prefix      = azurerm_subnet.backend_subnet.address_prefixes[0]
     destination_address_prefix = "*"
   }
