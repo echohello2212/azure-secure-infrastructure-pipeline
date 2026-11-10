@@ -73,3 +73,18 @@ resource "azurerm_private_dns_zone_virtual_network_link" "vnet_link_blob" {
   virtual_network_id    = azurerm_virtual_network.vnet_asip.id
   registration_enabled  = false
 }
+
+#Private DNS zone for SQL DB, resolves the storage name to the private endpoint
+resource "azurerm_private_dns_zone" "db" {
+  name                = "privatelink.database.windows.net"
+  resource_group_name = azurerm_resource_group.rg_asip.name
+}
+
+#Links the DB zone to the VNet. No registration, the private endpoint creates the record
+resource "azurerm_private_dns_zone_virtual_network_link" "vnet_link_db" {
+  name                  = "vnet-link-db"
+  resource_group_name   = azurerm_resource_group.rg_asip.name
+  private_dns_zone_name = azurerm_private_dns_zone.db.name
+  virtual_network_id    = azurerm_virtual_network.vnet_asip.id
+  registration_enabled  = false
+}
