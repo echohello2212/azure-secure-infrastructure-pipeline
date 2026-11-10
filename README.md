@@ -13,8 +13,8 @@ Five separate Terraform roots, each with its own state file.
 
 | Root | Holds | Lifecycle |
 |---|---|---|
-| `network/` | Resource group, VNet, subnets, NSGs, Log Analytics workspace, blob private DNS zone | Long-lived |
-| `datastores/` | Storage account and its private endpoint | Long-lived, protected |
+| `network/` | Resource group, VNet, subnets, NSGs, Log Analytics workspace, private DNS zones for blob and SQL, Defender plan settings | Long-lived |
+| `datastores/` | Storage account and container, SQL server and database, private endpoints for blob and SQL | Long-lived, protected |
 | `compute/` | Frontend and backend Linux VMs | Deployed for testing |
 | `connectivity/` | Application Gateway with WAF, Azure Bastion, gateway diagnostics | Deployed for testing |
 | `frontdoor/` | Azure Front Door and its WAF policy | Validated, not deployed |
@@ -29,6 +29,18 @@ rg-asip
     └── snet-endpoints     (10.0.5.0/24)  nsg-endpoints
 ```
 
+Resources are named by type with a short prefix and no purpose suffix, because the lab has one of each. With several, names would carry the purpose and environment.
+
+| Subnet | Role | Accepts traffic from |
+|---|---|---|
+| `snet-appgw` | The only public entry point: gateway and WAF | The internet (admin IP only, during tests) |
+| `snet-frontend` | Frontend VMs | Gateway subnet (HTTP), Bastion (SSH) |
+| `snet-backend` | Backend VMs, which reach the data tier only through the endpoints subnet | Frontend subnet (443), Bastion (SSH) |
+| `AzureBastionSubnet` | Administration, so no VM needs a public IP | The admin IP |
+| `snet-endpoints` | Private endpoints for blob and SQL, the single entry to the data tier. No compute | Backend subnet (443 blob, 1433 SQL) |
+
+Each subnet has one role and its own NSG, so traffic is allowed one hop at a time and a compromise in one tier cannot reach the next directly (segmentation, least privilege). The endpoints subnet holds only the private endpoints, so every rule about reaching the data tier is in one place.
+
 **Why separate roots.** Each root has its own lifecycle, so the costly, disposable parts (gateway, Bastion, VMs) can be destroyed after every session while the network and the data stay put. Separate state also limits the blast radius: a bad apply or destroy in one root cannot touch another root's resources. Anything that stores data lives in `datastores/`, out of reach of a routine teardown. The roots find each other through data sources, not remote state lookups. That keeps coupling loose and means a root never needs read access to another root's state, which is least privilege applied to the tooling. Dependencies run one way: `network` → `datastores` → `compute` → `connectivity`.
 
 ## Security design
@@ -38,9 +50,11 @@ Security is layered (defense in depth), so no single control is the only thing b
 1. **The edge.** The gateway is the only public entry point. Its NSG denies inbound traffic by default, and the WAF (OWASP 3.2) runs in **Prevention** mode, so injection attempts get a `403`. Detection mode was tested first to see what the rules catch before enforcing them: observe, then enforce. For tests, a temporary rule opens the gateway to the admin IP only.
 2. **Segmentation.** The frontend accepts HTTP from the gateway subnet only, and the backend accepts 443 from the frontend only. Each hop allows one source and one port, so a compromised tier cannot reach arbitrary tiers (least privilege, lateral movement limited).
 3. **Administration.** No VM has a public IP and login is by SSH key only. Admin access goes through Azure Bastion, restricted to the admin IP, so the management plane has a small attack surface and strong authentication.
-4. **The data path.** The backend reaches blob storage through a private endpoint in a dedicated subnet. Its NSG accepts 443 from the backend subnet only, the backend denies outbound by default, and a private DNS zone resolves the storage name to the endpoint's private address. The storage account's public endpoint is closed, so there is no route to the data from the internet. This protects **confidentiality** by removing the path, not by guarding it. DNS only answers where the endpoint is, the NSG decides who connects: the frontend resolves the private address too, but its connection times out.
+4. **The data path.** The backend reaches blob storage and SQL through private endpoints in a dedicated subnet. Its NSG accepts 443 (blob) and 1433 (SQL) from the backend subnet only, the backend allows outbound to nothing but those two ports on that subnet, and private DNS zones resolve the service names to the endpoints' private addresses. Both services have public network access off, so there is no route to the data from the internet. This protects **confidentiality** by removing the path, not by guarding it. DNS only answers where the endpoint is, the NSG decides who connects: the frontend resolves the private address too, but its connection times out.
 5. **The storage account.** Authentication is Entra-only (shared keys off), so every access is a named identity that is authorized by role, not a shared secret anyone could leak. Anonymous access is off and TLS 1.2 is the minimum. Cross-tenant replication is off because the data might be PII or other sensitive information. Versioning and 7-day soft delete protect **integrity** and **availability** against bad writes and accidental deletion. The storage firewall denies by default and admits only the admin IP, and only while public access is switched on.
-6. **Accountability.** Gateway firewall and access logs go to a Log Analytics workspace. That is the audit trail, the accounting part of **AAA**: who reached the gateway, what the WAF matched and what it did about it. The workspace is protected from accidental deletion for that reason.
+6. **The database.** The SQL server is Entra-only, so there is no password to store or rotate, and its public network access is off. Like blob, it is reached only through a private endpoint, on 1433 from the backend subnet. The serverless database pauses after 30 minutes idle, and its backups are local only, which suits a lab.
+7. **Posture.** Defender for Cloud's free tier assesses the whole environment. The paid plans for VMs, SQL and storage are pinned to Free in code, so a plan switched on in the portal shows up as a diff on the next `plan`.
+8. **Accountability.** Gateway firewall and access logs go to a Log Analytics workspace. That is the audit trail, the accounting part of **AAA**: who reached the gateway, what the WAF matched and what it did about it. The workspace is protected from accidental deletion for that reason.
 
 State lives in Azure Storage with Azure AD auth only, no shared keys, no public blob access, TLS 1.2 minimum, versioning, soft delete and a delete lock.
 
@@ -71,6 +85,7 @@ Written and validated in `frontdoor/`, but not tested. My Azure account type doe
    $env:TF_VAR_location = "<azure-region>"
    $env:TF_VAR_admin_ip = "<your-public-ip>"
    $env:TF_VAR_ssh_public_key_path = "<path-to-public-key>"
+   $env:TF_VAR_sql_admin_login = (az ad signed-in-user show --query userPrincipalName -o tsv)
    ```
 
 5. In order `network/`, `datastores/`, `compute/`, `connectivity/`, run:
@@ -93,9 +108,9 @@ The gateway accepts no public traffic by default. To test it, a temporary rule o
 
 Structure, in the order you need it:
 - **Best practice and order of operations:** habits, then startup and teardown.
-- **Environment and checks:** variables, admin IP, Azure checks.
-- **Verification:** gateway health and test requests, the private path checks, changing WAF mode, querying the logs.
-- **Ready-to-paste snippets:** temporary NSG rules (with the actual rule to copy), temporary storage access, removing `prevent_destroy`, and the Front Door steps with the origin-lock note.
+- **Environment and checks:** variables, admin IP, SQL admin login, Azure checks.
+- **Verification:** gateway health and test requests, the endpoint and private path checks, changing WAF mode, querying the logs.
+- **Ready-to-paste snippets:** temporary NSG rules (with the actual rule to copy), temporary storage access, removing `prevent_destroy` from the five protected resources, and the Front Door steps with the origin-lock note.
 
 ## Test results
 
@@ -113,8 +128,13 @@ Structure, in the order you need it:
 | Storage name from the frontend VM | Private endpoint address (DNS is not access control) | Pass |
 | Backend to the storage endpoint | Service answers | Pass |
 | Frontend to the storage endpoint | Blocked (timeout) | Pass |
+| Private endpoint connections (blob and SQL) | `Approved` | Pass |
+| Storage public network access | `Disabled`, firewall `Deny` | Pass |
+| Storage over the public path (own computer) | Refused by the service (`403`), public access denied | Pass |
+| Blob container | Private, listed through the management plane | Pass |
+| Defender plans | `Free`, except the platform-managed baseline | Pass |
 
-Not yet tested: authenticated access to storage (the backend has no managed identity or role yet), SSH from frontend to backend (should be blocked), backend outbound to the internet after the deny rule.
+Not yet tested: a SQL connection from the backend (the path is built, the test needs a deploy), authenticated access to storage (the backend has no managed identity or role yet), SSH from frontend to backend (should be blocked), backend outbound to the internet after the deny rule.
 
 ## Destroy
 
@@ -135,8 +155,11 @@ The gateway, Bastion, public IPs and VMs bill while they exist. `network/` and `
 - **Bastion Basic:** enough for browser SSH to VMs in one VNet. Standard adds native client, file transfer and peered-network access. Premium adds private-only deployment and session recording.
 - **Environment variables:** values that change per host stay out of the repo.
 - **Pinned image version:** Ubuntu 24.04 LTS, version fixed for reproducibility.
-- **`prevent_destroy` only on stateful resources:** the storage account (data protection) and the log workspace (the audit trail). Disposable resources are rebuilt on purpose. The limit: it guards only Terraform, so a portal deletion bypasses it. Production would add management locks or immutability. The procedure to remove it is in the quickstart.
+- **`prevent_destroy` only on stateful resources:** the storage account and its container, the SQL server and its database (data protection), and the log workspace (the audit trail). Disposable resources are rebuilt on purpose. The limit: it guards only Terraform, so a portal deletion bypasses it. Production would add management locks or immutability. The procedure to remove it is in the quickstart.
 - **Entra-only storage:** shared keys off was tried first as the hardened setting, with the provider told to use Entra ID for data-plane calls. A second plan after the apply returned `No changes`, which confirmed it works.
+- **Entra-only SQL:** password logins are off, so there is no SQL password to store, rotate or leak. The admin is the identity running Terraform, so in a pipeline it will be the pipeline's identity.
+- **Serverless SQL, local backups:** the smallest serverless tier with auto-pause, because a lab database sits idle. I could not find the free-limit argument in the provider docs, so it uses the paid tier. Production would use geo-redundant backups.
+- **Defender settings are subscription-wide:** they belong in their own governance root. At this scale they sit in `network/`, which is long-lived and applied first, so monitoring exists before the VMs and gateway do.
 - **Front Door kept separate:** no working root depends on it, and the NSG rule that lets it in is a copy-paste snippet in `frontdoor/`, not code in `network/`.
 - **Uniformity across roots and modules:** the same file names, backend layout and naming everywhere, because variables and settings are what quietly differ between roots. IaC is meant to be replicable, and copying is the fastest way to replicate. The risk is carelessness: copy, paste, assume it is right, and get sloppy. So after copying, know which values must change (state key, names, variables), then run `fmt`, `validate` and `plan` and read the result. This project hit it: a new root with no `backend.tf`, and a copied backend that kept the wrong state key.
 
@@ -150,9 +173,12 @@ What I would change with a real budget and real traffic:
 - Private endpoints and self-hosted runners for the state storage
 - Archive export for logs, with the daily cap sized from traffic and budget
 - Management locks on stateful resources
+- Vaulted backups for blob, and geo-redundant backups for SQL
 - An HTTPS listener on the gateway
 
 ## Known lab trade-offs
+
+These trade-offs reflect the lab's scale and focus. In an organization, the tiers, services and security measures are chosen by need and by how important each service is: the more critical the data or the service, the stronger the controls, and the lower the risk, the lighter and cheaper they can be. Where relevant, the items below name what production would change.
 
 - The gateway serves HTTP only, on a single instance.
 - Frontend outbound traffic is open.
@@ -161,6 +187,9 @@ What I would change with a real budget and real traffic:
 - No NAT gateway. VMs cannot reach the internet.
 - Bastion has a public IP, limited to the admin IP by NSG. Premium private-only deployment would remove it.
 - Logs are kept 30 days with no archive.
+- The SQL admin login is kept out of the repo (environment variable) but stored in state, which is protected. With Entra-only auth it grants nothing on its own.
+- SQL backups are local only, and blob relies on soft delete and versioning. The VMs are not backed up, because they are rebuilt from code.
+- Defender's `Discovery` and `FoundationalCspm` plans show as `Standard`. They are the platform-managed free baseline and cost nothing.
 
 ## Lessons learned
 
@@ -171,11 +200,12 @@ What I would change with a real budget and real traffic:
 - **The second plan is the real test.** The hardened storage settings (keys off, public access closed) only proved safe when a plan right after the apply said `No changes`.
 - **Review the diff before you apply.** `git diff` caught NSG rules pasted into the wrong block, which would have removed the `GatewayManager` rule from the gateway's NSG.
 - **Test with a valid request.** A bare request to the storage account returned `400 InvalidQueryParameterValue` from the backend. The service rejected it as malformed, so it said nothing about access. A request with `?comp=list` is valid, so the service has to decide.
+- **Unused allow rules are attack surface.** The backend NSG still allowed outbound to `AzureMonitor` and `AzureBackup` although no agent or backup existed. Removing them made the rule list match what the backend actually does.
 - **An interrupted apply leaves orphans.** The gateway and Bastion existed in Azure but not in state, and had to be deleted by hand.
 
 ## Next steps
 
-- Azure SQL (Entra-only, private endpoint), Azure Policy (every subnet has an NSG) and Defender for Cloud (free tier)
+- Azure Policy: every subnet has an NSG (the built-in definition only audits)
 - Drift management experiments
 - GitHub Actions with OIDC: plan on pull requests, deploy and scheduled destroy workflows
 - Modules for the VMs and the NSGs, and a `for_each` lookup for the frontend NICs, once the pipeline works
@@ -189,11 +219,11 @@ What I would change with a real budget and real traffic:
 - [x] Segmentation tests (core)
 - [x] Application Gateway with WAF
 - [x] Logging (Log Analytics, gateway logs)
-- [x] Private endpoint for storage
+- [x] Private endpoints and blob container
 - [ ] Front Door (written and validated, not tested)
-- [ ] Azure SQL
+- [x] Azure SQL
 - [ ] Azure Policy: every subnet has an NSG
-- [ ] Defender for Cloud
+- [x] Defender for Cloud (free tier)
 - [ ] Drift management experiments
 - [ ] GitHub Actions with OIDC
 - [ ] Modules
