@@ -13,13 +13,21 @@
 tfplan
 *.tfplan
 
-# Terraform crash logs
+# Terraform crash and debug logs
 crash.log
+crash.*.log
+*.log
+
+# Environment files
+.env
+.env.*
 
 # Editor
 .vscode/
 
-#SSH keys
+# SSH keys and certificates
 asip_key*
 *.pem
+*.key
+*.ppk
 id_*
