@@ -1,0 +1,54 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+#Read-only token, nothing here pushes or deploys
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ matrix.root}}
+    strategy:
+      fail-fast: false
+      matrix:
+        root: [
+          "network",
+          "datastores",
+          "compute",
+          "connectivity",
+          "frontdoor"
+        ]
+
+    steps:
+      #Does not store token, nothing pushes
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16.5"
+
+      - name: terraform fmt
+        run: terraform fmt -check
+
+      - name: terraform init
+        run: terraform init -input=false -backend=false
+      
+      #No backend, so validate needs no Azure credentials
+      - name: terraform validate
+        run: terraform validate -no-color
+      
