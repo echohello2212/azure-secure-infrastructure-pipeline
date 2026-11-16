@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: ${{ matrix.root}}
+        working-directory: ${{ matrix.root }}
     strategy:
       fail-fast: false
       matrix:
