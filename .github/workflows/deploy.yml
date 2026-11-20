@@ -3,6 +3,7 @@ on:
   push:
     branches:
       [main]
+    #Long-lived roots only, compute and connectivity are started by hand
     paths:
       - "network/**"
       - "datastores/**"
@@ -12,6 +13,7 @@ on:
       root:
         description: Root to deploy
         type: choice
+        #full startup runs the whole chain in order
         options:
           - network
           - datastores
@@ -23,11 +25,13 @@ permissions:
   contents: read
   id-token: write
 
+#One deploy at a time, a running apply is never cancelled
 concurrency:
   group: deploy
   cancel-in-progress: false
     
 jobs:
+  #Runs on a push or a network or full startup dispatch
   network:
     if: github.event_name == 'push' || inputs.root == 'network' || inputs.root == 'full startup'
     uses: ./.github/workflows/deploy-root.yml
@@ -35,15 +39,17 @@ jobs:
       root: "network"
     secrets: inherit
 
+  #Runs on a push or a network or full startup dispatch
   datastores:
     needs: network
-    #Runs on a push or a datastores or full startup dispatch, unless an earlier job failed
+    #Runs on a push or a datastores or full startup dispatch, unless an earlier job failed or is cancelled
     if: ${{ !failure() && !cancelled() && (github.event_name == 'push' || inputs.root == 'datastores' || inputs.root == 'full startup') }}
     uses: ./.github/workflows/deploy-root.yml
     with:
       root: "datastores"
     secrets: inherit
 
+  #Dispatch only for cost efficiency, needs only network
   compute:
     needs: network
     if: ${{ !failure() && !cancelled() && (inputs.root == 'compute' || inputs.root == 'full startup') }}
@@ -52,6 +58,7 @@ jobs:
       root: "compute"
     secrets: inherit
 
+  #Dispatch only, needs compute and network
   connectivity:
     needs: [network, compute]
     if: ${{ !failure() && !cancelled() && (inputs.root == 'connectivity' || inputs.root == 'full startup') }}

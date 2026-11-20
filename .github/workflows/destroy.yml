@@ -5,8 +5,10 @@ on:
       root:
         description: Root to destroy
         type: choice
+        #Destroy in reverse build order, stateful roots are left out on purpose
         options:
           - connectivity
+          - compute
           - frontdoor
       confirm:
         type: string
