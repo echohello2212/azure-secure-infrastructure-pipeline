@@ -38,7 +38,7 @@ jobs:
   datastores:
     needs: network
     #Runs on a push or a datastores or full startup dispatch, unless an earlier job failed
-    if: ${{ !failure() && (github.event_name == 'push' || inputs.root == 'datastores' || inputs.root == 'full startup') }}
+    if: ${{ !failure() && !cancelled() && (github.event_name == 'push' || inputs.root == 'datastores' || inputs.root == 'full startup') }}
     uses: ./.github/workflows/deploy-root.yml
     with:
       root: "datastores"
@@ -46,7 +46,7 @@ jobs:
 
   compute:
     needs: network
-    if: ${{ !failure() && (inputs.root == 'compute' || inputs.root == 'full startup') }}
+    if: ${{ !failure() && !cancelled() && (inputs.root == 'compute' || inputs.root == 'full startup') }}
     uses: ./.github/workflows/deploy-root.yml
     with:
       root: "compute"
@@ -54,7 +54,7 @@ jobs:
 
   connectivity:
     needs: [network, compute]
-    if: ${{ !failure() && (inputs.root == 'connectivity' || inputs.root == 'full startup') }}
+    if: ${{ !failure() && !cancelled() && (inputs.root == 'connectivity' || inputs.root == 'full startup') }}
     uses: ./.github/workflows/deploy-root.yml
     with:
       root: "connectivity"
