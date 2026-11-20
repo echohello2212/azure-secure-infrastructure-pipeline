@@ -29,5 +29,10 @@ variable "storage_public_access" {
 variable "sql_admin_login" {
   description = "The Azure AD login name of the SQL admin user."
   type        = string
-  sensitive   = true
+  default     = "sg-asip-sql-admins"
+}
+
+variable "sql_admin_object_id" {
+  description = "Object ID of the Entra group that administers the SQL server"
+  type        = string
 }
