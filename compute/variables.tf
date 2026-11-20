@@ -23,8 +23,8 @@ variable "admin_username" {
   default     = "azureuser"
 }
 
-variable "ssh_public_key_path" {
-  description = "The path to the SSH public key for the virtual machine."
+variable "ssh_public_key" {
+  description = "SSH public key content for the virtual machine."
   type        = string
 }
 
