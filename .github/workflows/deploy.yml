@@ -15,6 +15,8 @@ on:
         options:
           - network
           - datastores
+          - compute
+          - connectivity
           - full startup
 
 permissions:
@@ -40,4 +42,20 @@ jobs:
     uses: ./.github/workflows/deploy-root.yml
     with:
       root: "datastores"
+    secrets: inherit
+
+  compute:
+    needs: network
+    if: ${{ !failure() && (inputs.root == 'compute' || inputs.root == 'full startup') }}
+    uses: ./.github/workflows/deploy-root.yml
+    with:
+      root: "compute"
+    secrets: inherit
+
+  connectivity:
+    needs: [network, compute]
+    if: ${{ !failure() && (inputs.root == 'connectivity' || inputs.root == 'full startup') }}
+    uses: ./.github/workflows/deploy-root.yml
+    with:
+      root: "connectivity"
     secrets: inherit
