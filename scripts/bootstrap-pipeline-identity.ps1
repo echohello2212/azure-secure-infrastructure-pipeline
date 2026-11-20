@@ -1,8 +1,8 @@
 #Names
 $rg = "rg-asip-identity"
-$identity = "id-asip-deploy"
+$deployIdentity = "id-asip-deploy"
 $planIdentity = "id-asip-plan"
-$credentialName = "github-deploy-environment"
+$deployCredentialName = "github-deploy-environment"
 $container = "tfstate"
 #State storage, names as in backend.tf
 $stateRg = "rg-asip-tfstate"
@@ -15,7 +15,7 @@ function Assert-Success($message) {
 }
 
 #Identity, uses the location variable already set
-az identity create --name $identity --resource-group $rg --location $env:TF_VAR_location -o none
+az identity create --name $deployIdentity --resource-group $rg --location $env:TF_VAR_location -o none
 Assert-Success "identity create failed"
 
 #Subject built from the plan credential, ending swapped to the environment
@@ -24,15 +24,15 @@ Assert-Success "reading plan credential failed"
 if (-not $subject) { Write-Error "plan credential not found"; exit 1 }
 
 #Credential, exact match, no wildcards
-az identity federated-credential create --name $credentialName --identity-name $identity --resource-group $rg --issuer "https://token.actions.githubusercontent.com" --subject $subject --audiences "api://AzureADTokenExchange" -o none
+az identity federated-credential create --name $deployCredentialName --identity-name $deployIdentity --resource-group $rg --issuer "https://token.actions.githubusercontent.com" --subject $subject --audiences "api://AzureADTokenExchange" -o none
 Assert-Success "creating federated credential failed"
 
 #Client id to clipboard only, never printed
-az identity show --name $identity --resource-group $rg --query clientId -o tsv | Set-Clipboard
+az identity show --name $deployIdentity --resource-group $rg --query clientId -o tsv | Set-Clipboard
 Assert-Success "copying the client id failed"
 
 #Identity principal, never printed
-$principal = az identity show --name $identity --resource-group $rg --query principalId -o tsv
+$principal = az identity show --name $deployIdentity --resource-group $rg --query principalId -o tsv
 Assert-Success "reading the principal id failed"
 
 #Scopes built in variables so no id is typed or shown
