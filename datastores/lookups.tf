@@ -17,8 +17,3 @@ data "azurerm_private_dns_zone" "db" {
   name                = "privatelink.database.windows.net"
   resource_group_name = data.azurerm_resource_group.rg_asip.name
 }
-
-
-data "azurerm_client_config" "current" {
-
-}

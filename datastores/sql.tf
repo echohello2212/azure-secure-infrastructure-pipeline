@@ -8,7 +8,7 @@ resource "azurerm_mssql_server" "sql_asip" {
 
   azuread_administrator {
     login_username              = var.sql_admin_login
-    object_id                   = data.azurerm_client_config.current.object_id
+    object_id                   = var.sql_admin_object_id
     azuread_authentication_only = true
   }
 
