@@ -70,7 +70,16 @@ jobs:
 
     #Waits up to 5 minutes for the state lock, then fails
     - name: terraform plan destroy
-      run: terraform plan -destroy -no-color -input=false -lock-timeout=5m
+      shell: bash
+      run: terraform plan -destroy -no-color -input=false -lock-timeout=5m | tee plan.txt
+
+    - name: plan summary
+      if: always()
+      run: |
+        echo '### Terraform Destroy Plan' >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        cat plan.txt >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
 
 
   destroy-apply:
