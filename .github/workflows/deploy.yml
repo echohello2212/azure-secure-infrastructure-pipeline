@@ -1,0 +1,102 @@
+name: Deploy
+on:
+  push:
+    branches:
+      [main]
+    paths:
+      ["network/**"]
+
+  workflow_dispatch:
+    inputs:
+      root:
+        description: Root to deploy
+        type: choice
+        options:
+          - network
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+    
+jobs:
+  plan-network:
+    #Secrets mapped to the variables terraform reads
+    env:
+      TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_location: ${{ secrets.ASIP_LOCATION }}
+      TF_VAR_admin_ip: ${{ secrets.ASIP_ADMIN_IP }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.root || 'network' }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      #Short-lived token from the trust, no stored cloud password
+      - name: azure login
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.16.5"
+
+      #Backend uses the signed-in identity, no storage keys
+      - name: terraform init
+        run: terraform init -input=false
+
+      #Waits up to 5 minutes for the state lock, then fails
+      - name: terraform plan
+        run: terraform plan -no-color -input=false -lock-timeout=5m
+
+  apply-network:
+    needs: plan-network
+    environment: deploy
+    env:
+      TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_location: ${{ secrets.ASIP_LOCATION }}
+      TF_VAR_admin_ip: ${{ secrets.ASIP_ADMIN_IP }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ${{ inputs.root || 'network' }}
+    
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.16.5"
+
+      - name: azure login
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: terraform init
+        run: terraform init -input=false
+
+      - name: terraform plan -out
+        run: terraform plan -out=tfplan -input=false -lock-timeout=5m
+
+      - name: terraform apply plan
+        run: terraform apply -input=false -lock-timeout=5m tfplan
