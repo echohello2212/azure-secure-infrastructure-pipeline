@@ -115,8 +115,8 @@ Assert-Success "creating the plan storage blob contributor assignment failed"
 az role assignment create --assignee-object-id $deployPrincipal --assignee-principal-type ServicePrincipal --role "Contributor" --scope $asipRgScope -o none
 Assert-Success "creating the deploy contributor assignment on rg-asip failed"
 
-#Subscription scope, kept until the deploy role is narrowed
-az role assignment create --assignee-object-id $deployPrincipal --assignee-principal-type ServicePrincipal --role "Contributor" --scope $subscriptionScope -o none
+#Security admin on the subscription, only for the defender plans in defender.tf
+az role assignment create --assignee-object-id $deployPrincipal --assignee-principal-type ServicePrincipal --role "Security Admin" --scope $subscriptionScope -o none
 Assert-Success "creating the deploy contributor assignment on the subscription failed"
 
 #Deploy identity, state read, write and lock lease
