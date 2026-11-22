@@ -16,7 +16,7 @@ terraform {
 #Storage access uses Entra ID instead of shared keys
 provider "azurerm" {
   features {}
-
-  subscription_id     = var.subscription_id
-  storage_use_azuread = true
+  resource_provider_registrations = "none"
+  subscription_id                 = var.subscription_id
+  storage_use_azuread             = true
 }

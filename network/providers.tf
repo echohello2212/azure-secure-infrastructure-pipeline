@@ -11,9 +11,11 @@ terraform {
     }
   }
 }
-#Azure RM provider configu
+
+#Azure RM provider configuration
 provider "azurerm" {
-  features {}
   #Subscription ID for authentication set as variable for replication and security purposes
-  subscription_id = var.subscription_id
+  features {}
+  resource_provider_registrations = "none"
+  subscription_id                 = var.subscription_id
 }
