@@ -30,7 +30,7 @@ resource "azurerm_storage_account" "sa_asip" {
     ip_rules       = [var.admin_ip]
   }
 
-  #Remove prevent_destroy before destroying, this account holds data
+  #Protects the stored data, removed by the teardown workflow or by hand for a local destroy
   lifecycle {
     prevent_destroy = true
   }
@@ -61,7 +61,7 @@ resource "azurerm_storage_container" "blob_asip" {
   storage_account_id    = azurerm_storage_account.sa_asip.id
   container_access_type = "private"
 
-  #Prevent accidental deletion
+  #Protects the blob data, removed by the teardown workflow or by hand for a local destroy
   lifecycle {
     prevent_destroy = true
   }

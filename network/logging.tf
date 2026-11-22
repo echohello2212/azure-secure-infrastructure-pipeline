@@ -7,7 +7,7 @@ resource "azurerm_log_analytics_workspace" "log_asip" {
   daily_quota_gb      = 1
   retention_in_days   = 30
 
-  #Remove prevent_destroy before running terraform destroy, otherwise the destroy fails
+  #Protects the audit trail, removed by the teardown workflow or by hand for a local destroy
   lifecycle {
     prevent_destroy = true
   }

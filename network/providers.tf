@@ -15,7 +15,12 @@ terraform {
 #Azure RM provider configuration
 provider "azurerm" {
   #Subscription ID for authentication set as variable for replication and security purposes
-  features {}
+  #Log analytics permanent delete on destroy to prevent naming collision when recreated
+  features {
+    log_analytics_workspace {
+      permanently_delete_on_destroy = true
+    }
+  }
   resource_provider_registrations = "none"
   subscription_id                 = var.subscription_id
 }
