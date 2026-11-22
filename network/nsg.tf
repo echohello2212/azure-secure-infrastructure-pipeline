@@ -1,8 +1,8 @@
 #NSG rules for frontend subnet
 resource "azurerm_network_security_group" "nsg_frontend" {
   name                = "nsg-frontend"
-  location            = azurerm_resource_group.rg_asip.location
-  resource_group_name = azurerm_resource_group.rg_asip.name
+  location            = data.azurerm_resource_group.rg_asip.location
+  resource_group_name = data.azurerm_resource_group.rg_asip.name
 
   #Inbound rules
   security_rule {
@@ -48,8 +48,8 @@ resource "azurerm_subnet_network_security_group_association" "frontend_nsg_assoc
 #NSG rules for backend subnet
 resource "azurerm_network_security_group" "nsg_backend" {
   name                = "nsg-backend"
-  location            = azurerm_resource_group.rg_asip.location
-  resource_group_name = azurerm_resource_group.rg_asip.name
+  location            = data.azurerm_resource_group.rg_asip.location
+  resource_group_name = data.azurerm_resource_group.rg_asip.name
 
   #Inbound rules
   security_rule {
@@ -132,8 +132,8 @@ resource "azurerm_subnet_network_security_group_association" "backend_nsg_assoc"
 #NSG rules for bastion subnet
 resource "azurerm_network_security_group" "nsg_bastion" {
   name                = "nsg-bastion"
-  location            = azurerm_resource_group.rg_asip.location
-  resource_group_name = azurerm_resource_group.rg_asip.name
+  location            = data.azurerm_resource_group.rg_asip.location
+  resource_group_name = data.azurerm_resource_group.rg_asip.name
 
   #Inbound rules
   security_rule {
@@ -247,8 +247,8 @@ resource "azurerm_subnet_network_security_group_association" "bastion_nsg_assoc"
 #NSG rules for Endpoints Subnet 
 resource "azurerm_network_security_group" "nsg_endpoints" {
   name                = "nsg-endpoints"
-  location            = azurerm_resource_group.rg_asip.location
-  resource_group_name = azurerm_resource_group.rg_asip.name
+  location            = data.azurerm_resource_group.rg_asip.location
+  resource_group_name = data.azurerm_resource_group.rg_asip.name
   #Inbound rules
   security_rule {
     name                       = "Allow-Backend-HTTPS"
@@ -307,8 +307,8 @@ resource "azurerm_subnet_network_security_group_association" "endpoints_nsg_asso
 #NSG rules for application gateway subnet 
 resource "azurerm_network_security_group" "nsg_appgw" {
   name                = "nsg-appgw"
-  location            = azurerm_resource_group.rg_asip.location
-  resource_group_name = azurerm_resource_group.rg_asip.name
+  location            = data.azurerm_resource_group.rg_asip.location
+  resource_group_name = data.azurerm_resource_group.rg_asip.name
 
   #Inbound rules
   security_rule {
