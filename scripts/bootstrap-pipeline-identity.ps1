@@ -1,6 +1,6 @@
 #Bootstrap pipeline identities
 #Creates the identity group, the plan and deploy identities with their credentials and roles, and rg-asip, then copies both client ids to the clipboard
-#Needs az login, TF_VAR_location, TF_VAR_subscription_id and ASIP_GITHUB_REPO (owner/repo) set, and the state storage from bootstrap-state.ps1
+#Needs az login, gh auth login, TF_VAR_location, TF_VAR_subscription_id and ASIP_GITHUB_REPO (owner/repo) set, and the state storage from bootstrap-state.ps1
 
 #Names
 $rg = "rg-asip-identity"
@@ -47,10 +47,15 @@ Assert-Success "creating the plan identity failed"
 az identity create --name $deployIdentity --resource-group $rg --location $location -o none
 Assert-Success "creating the deploy identity failed"
 
-#Subjects built from the repo, exact match, no wildcards
-$planSubject = "repo:${repo}:pull_request"
-$deploySubject = "repo:${repo}:environment:deploy"
-$mainSubject = "repo:${repo}:ref:refs/heads/main"
+#Subject prefix from GitHub, so immutable subject claims are picked up
+$subPrefix = gh api "repos/$repo/actions/oidc/customization/sub" --jq ".sub_claim_prefix"
+Assert-Success "reading the OIDC subject prefix failed"
+if (-not $subPrefix) { $subPrefix = "repo:$repo" }
+
+#Subjects built from the prefix, exact match, no wildcards
+$planSubject = "${subPrefix}:pull_request"
+$deploySubject = "${subPrefix}:environment:deploy"
+$mainSubject = "${subPrefix}:ref:refs/heads/main"
 
 #Plan credential, pull requests
 az identity federated-credential create --name $planCredentialName --identity-name $planIdentity --resource-group $rg --issuer $issuer --subject $planSubject --audiences $audience -o none
