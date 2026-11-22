@@ -3,6 +3,15 @@ data "azurerm_resource_group" "rg_asip" {
   name = var.resource_group_name
 }
 
+#Group moved to the bootstrap script, forget it in state without destroying
+removed {
+  from = azurerm_resource_group.rg_asip
+
+  lifecycle {
+    destroy = false
+  }
+}
+
 #Create Azure VNet
 resource "azurerm_virtual_network" "vnet_asip" {
   name          = var.vnet_name
