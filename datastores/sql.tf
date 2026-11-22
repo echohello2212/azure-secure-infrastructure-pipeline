@@ -12,6 +12,7 @@ resource "azurerm_mssql_server" "sql_asip" {
     azuread_authentication_only = true
   }
 
+  #Protects the database server, removed by the teardown workflow or by hand for a local destroy
   lifecycle {
     prevent_destroy = true
   }
@@ -26,6 +27,7 @@ resource "azurerm_mssql_database" "db_asip" {
   max_size_gb                 = 10
   storage_account_type        = "Local"
 
+  #Protects the database, removed by the teardown workflow or by hand for a local destroy
   lifecycle {
     prevent_destroy = true
   }
