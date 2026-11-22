@@ -61,7 +61,6 @@ resource "azurerm_linux_virtual_machine" "frontend" {
   resource_group_name               = data.azurerm_resource_group.rg.name
   size                              = var.vm_size
   admin_username                    = var.admin_username
-  vm_agent_platform_updates_enabled = true
   custom_data                       = base64encode(file("${path.module}/cloud-init-frontend.yaml"))
 
   #Key login only
@@ -97,7 +96,6 @@ resource "azurerm_linux_virtual_machine" "backend" {
   resource_group_name               = data.azurerm_resource_group.rg.name
   size                              = var.vm_size
   admin_username                    = var.admin_username
-  vm_agent_platform_updates_enabled = true
 
   #Key login only
   disable_password_authentication = true
