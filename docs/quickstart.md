@@ -4,9 +4,14 @@ Built for ease: copy, paste and resume. Everything is in order, so you can pick 
 
 ## Contents
 
+- [Sign in](#sign-in)
 - [Best practice](#best-practice)
 - [Order of operations](#order-of-operations)
-- [Environment variables](#environment-variables)
+- [Variables and secrets](#variables-and-secrets)
+- [Bootstrap the identities](#bootstrap-the-identities)
+- [Running the workflows](#running-the-workflows)
+- [Who holds what](#who-holds-what)
+- [When a run is stuck](#when-a-run-is-stuck)
 - [Azure checks](#azure-checks)
 - [Verify the gateway](#verify-the-gateway)
 - [Verify the endpoints](#verify-the-endpoints)
@@ -17,6 +22,16 @@ Built for ease: copy, paste and resume. Everything is in order, so you can pick 
 - [Removing prevent_destroy](#removing-prevent_destroy)
 - [Querying the logs](#querying-the-logs)
 - [Front Door](#front-door)
+
+## Sign in
+
+```
+az login
+```
+
+Then check the right subscription is active, see [Azure checks](#azure-checks). With several subscriptions, select one with `az account set --subscription "<subscription-name-or-id>"`. For MFA or tenant errors, see the sign-in fixes under Azure checks.
+
+Only the [bootstrap scripts](#bootstrap-the-identities) need Owner. Everything else works with the access the pipeline identities have.
 
 ## Best practice
 
@@ -33,15 +48,17 @@ Built for ease: copy, paste and resume. Everything is in order, so you can pick 
 
 **Startup**
 
-1. Sign in and set the [environment variables](#environment-variables).
+1. [Sign in](#sign-in) and set the [variables](#variables-and-secrets) if you work locally.
 2. Run the [Azure checks](#azure-checks).
-3. `network/`, then `datastores/`. In each: `init`, `fmt`, `validate`, `plan`, `apply`. If they are still deployed, `plan` should say `No changes`, and you can move on.
-4. `compute/`, same steps.
-5. `connectivity/`, same steps. It looks up the frontend NIC, so `compute/` must be up first. The gateway takes 10-20 minutes.
+3. `network/`, then `datastores/`. If they are still deployed, `plan` should say `No changes`, and you can move on.
+4. `compute/`.
+5. `connectivity/`. It looks up the frontend NIC, so `compute/` must be up first. The gateway takes 10-20 minutes.
 6. [Verify the gateway](#verify-the-gateway).
 7. [Verify the endpoints](#verify-the-endpoints).
 8. [Verify the private path](#verify-the-private-path).
 9. Add any [temporary rules](#temporary-nsg-rules) last.
+
+Do steps 3-5 from GitHub with the [Deploy workflow](#running-the-workflows) (`full startup` runs them in order), or locally with `init`, `fmt`, `validate`, `plan`, `apply` in each root.
 
 `frontdoor/` is not part of the order. It is validated only, see [Front Door](#front-door).
 
@@ -56,11 +73,29 @@ Built for ease: copy, paste and resume. Everything is in order, so you can pick 
 az resource list --resource-group rg-asip --output table
 ```
 
+Do steps 2-3 with the [Destroy workflow](#running-the-workflows), or locally with `terraform destroy` in each root.
+
 `network/` and `datastores/` stay deployed. The VNet, subnets, NSGs, DNS zones, workspace, storage account, SQL server and database, endpoints and Defender settings cost little (the serverless database pauses when idle), and the ones that hold data are protected on purpose.
 
-## Environment variables
+## Variables and secrets
 
-Nothing environment-specific is stored in the repo. Set these per session.
+Nothing environment-specific is stored in the repo. Locally the values are environment variables, set per session. In the pipeline they are GitHub secrets. Commands that return an ID or another sensitive value put it in a variable or on the clipboard, never on screen, and this page follows the same habit.
+
+| Terraform variable | Local variable | GitHub secret | Where the value comes from |
+|---|---|---|---|
+| `subscription_id` | `TF_VAR_subscription_id` | `AZURE_SUBSCRIPTION_ID` | `az account show --query id -o tsv` |
+| `location` | `TF_VAR_location` | `ASIP_LOCATION` | The Azure region you deploy to |
+| `admin_ip` | `TF_VAR_admin_ip` | `ASIP_ADMIN_IP` | Your public IP, see [Admin IP](#admin-ip) |
+| `ssh_public_key` | `TF_VAR_ssh_public_key` | `ASIP_SSH_PUBLIC_KEY` | The content of the `.pub` file, the key without its comment |
+| `sql_admin_object_id` | `TF_VAR_sql_admin_object_id` | `ASIP_SQL_ADMIN_OBJECT_ID` | The group's object ID, see [SQL admin group](#sql-admin-group) |
+| | | `AZURE_TENANT_ID` | Your Entra tenant ID |
+| | | `AZURE_CLIENT_ID` | See below |
+
+`AZURE_CLIENT_ID` exists twice. The repo secret is the plan identity's client ID. The secret in the `deploy` environment is the deploy identity's, and it overrides the repo secret for jobs that use that environment. Both are copied to the clipboard and pasted into GitHub, never printed.
+
+`sql_admin_login` has a default (the group's name), so it needs no value.
+
+`ASIP_GITHUB_REPO` is a local-only input for the bootstrap script, set to `owner/repo`. It is not a Terraform variable or a GitHub secret. The script uses it to ask GitHub for the repo's OIDC subject prefix, so nothing hardcodes an ID.
 
 **PowerShell**
 
@@ -68,8 +103,8 @@ Nothing environment-specific is stored in the repo. Set these per session.
 $env:TF_VAR_subscription_id = (az account show --query id -o tsv)
 $env:TF_VAR_location = "<azure-region>"
 $env:TF_VAR_admin_ip = "<your-public-ip>"
-$env:TF_VAR_ssh_public_key_path = "<path-to-public-key>"
-$env:TF_VAR_sql_admin_login = (az ad signed-in-user show --query userPrincipalName -o tsv)
+$env:TF_VAR_ssh_public_key = (Get-Content "<path-to-public-key>")
+$env:TF_VAR_sql_admin_object_id = (az ad group show --group sg-asip-sql-admins --query id -o tsv)
 ```
 
 **Bash**
@@ -78,8 +113,8 @@ $env:TF_VAR_sql_admin_login = (az ad signed-in-user show --query userPrincipalNa
 export TF_VAR_subscription_id=$(az account show --query id -o tsv)
 export TF_VAR_location="<azure-region>"
 export TF_VAR_admin_ip="<your-public-ip>"
-export TF_VAR_ssh_public_key_path="<path-to-public-key>"
-export TF_VAR_sql_admin_login=$(az ad signed-in-user show --query userPrincipalName -o tsv)
+export TF_VAR_ssh_public_key=$(cat "<path-to-public-key>")
+export TF_VAR_sql_admin_object_id=$(az ad group show --group sg-asip-sql-admins --query id -o tsv)
 ```
 
 ### Admin IP
@@ -87,12 +122,89 @@ export TF_VAR_sql_admin_login=$(az ad signed-in-user show --query userPrincipalN
 `TF_VAR_admin_ip` is the public IP that Bastion, the temporary gateway rule and the storage firewall accept.
 
 - Find yours with any "what is my IP" site, or `curl https://api.ipify.org`.
-- **It might change** (router restart, new network, VPN). If Bastion or the gateway stops answering, update the variable and re-apply `network/` (and `datastores/` if storage access is on).
+- **It might change** (router restart, new network, VPN). If Bastion or the gateway stops answering, update the variable and re-apply `network/` (and `datastores/` if storage access is on). Update the `ASIP_ADMIN_IP` secret too, or the pipeline keeps the old value.
 - Never commit the real value.
 
-### SQL admin login
+### SQL admin group
 
-`TF_VAR_sql_admin_login` is the Entra login of the SQL admin. It is personal, so it is read from your sign-in at runtime and never committed. Terraform still stores it in state, which is protected.
+The SQL server's admin is the Entra group `sg-asip-sql-admins`, so access follows membership and does not depend on who runs Terraform. Its object ID is not committed.
+
+Copy it to the clipboard to paste into the `ASIP_SQL_ADMIN_OBJECT_ID` secret:
+
+```powershell
+az ad group show --group sg-asip-sql-admins --query id -o tsv | Set-Clipboard
+```
+
+Add a member by object ID:
+
+```powershell
+az ad group member add --group sg-asip-sql-admins --member-id "<member-object-id>"
+```
+
+## Bootstrap the identities
+
+Run once per subscription, as a user with **Owner** or User Access Administrator. The scripts create role assignments, which Contributor cannot do, and the pipeline cannot do it for itself, by design.
+
+1. `scripts/bootstrap-state.ps1` creates the state storage and its lock.
+2. `scripts/bootstrap-pipeline-identity.ps1` creates the identity group, the plan and deploy identities with their OIDC credentials, their roles, and `rg-asip`.
+
+Before the second script, set `ASIP_GITHUB_REPO` to `owner/repo` and sign in to the GitHub CLI (`gh auth login`). The script asks GitHub for the repo's OIDC subject prefix, so it works whether or not the subject uses immutable IDs, with nothing hardcoded. If a pipeline login later fails with `AADSTS700213`, the credential subject no longer matches what GitHub sends — re-run this script to rewrite it.
+
+Run each as a file, from a terminal where `TF_VAR_location`, `TF_VAR_subscription_id` and `ASIP_GITHUB_REPO` are set. The script can be run again safely. Client IDs go to the clipboard and nothing sensitive is printed. Paste the plan identity's into the repo secret `AZURE_CLIENT_ID`, and the deploy identity's into the `deploy` environment's `AZURE_CLIENT_ID`.
+
+Run it before the first `network` deploy, since `network/` looks `rg-asip` up and does not create it.
+
+## Running the workflows
+
+**Deploy:** Actions, Deploy, Run workflow, then pick a root.
+
+| Option | Runs |
+|---|---|
+| `network` | `network/` |
+| `datastores` | `datastores/` (needs `network/`) |
+| `compute` | `compute/` (needs `network/`) |
+| `connectivity` | `connectivity/` (needs `network/` and `compute/`) |
+| `full startup` | All four, in dependency order |
+
+A push to `main` that changes `network/` or `datastores/` also runs automatically. `compute` and `connectivity` never run on a push, because they cost money while they exist.
+
+Each root plans first. Read the plan on the run page, then approve in the `deploy` environment. Nothing is applied before that. Pull requests get a read-only plan and a validate run automatically.
+
+**Destroy:** Actions, Destroy, Run workflow. Pick `connectivity`, `compute` or `frontdoor`, and type the same name as confirmation. A mismatch stops at the first job. Read the destroy plan on the run page, then approve. Run `connectivity` before `compute`. The long-lived roots are not offered, destroy those locally after [removing prevent_destroy](#removing-prevent_destroy).
+
+## Who holds what
+
+What each identity should hold. Check it when a run fails with `AuthorizationFailed`, or after changing access.
+
+| Identity | Role | Scope |
+|---|---|---|
+| plan | Reader | `rg-asip` |
+| plan | Security Reader | Subscription |
+| plan | Storage Blob Data Contributor | State container |
+| deploy | Contributor | `rg-asip` |
+| deploy | Storage Blob Data Contributor | State container |
+
+To check, in your own terminal (nothing goes into a workflow or a log). Load the values into variables and never print them:
+
+```powershell
+$principal = az identity show --name id-asip-deploy --resource-group rg-asip-identity --query principalId -o tsv
+az role assignment list --assignee $principal --all --query "[].roleDefinitionName" -o tsv
+```
+
+Use `id-asip-plan` for the plan identity. This lists role names only, so a role at the wrong scope does not show. To see who holds what on the group:
+
+```powershell
+$scope = az group show --name rg-asip --query id -o tsv
+az role assignment list --scope $scope --query "[].{role:roleDefinitionName, type:principalType}" -o table
+```
+
+The variables only exist in that terminal session.
+
+## When a run is stuck
+
+- **Waiting for approval.** A run at the approval prompt holds the concurrency group, so every other deploy or destroy queues behind it. Approve or reject it. Rejecting is cleaner than cancelling.
+- **Do not cancel during an apply or destroy.** It can leave resources half-changed and the state locked.
+- **State locked after a cancelled or failed run.** Make sure no run is still active, then in the root's folder: `terraform force-unlock <lock-id>`. The lock ID is in the error message. Then run `plan` and read it before doing anything else.
 
 ## Azure checks
 
