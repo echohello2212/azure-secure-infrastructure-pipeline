@@ -131,6 +131,11 @@ Assert-Success "creating the teardown contributor assignment on rg-asip failed"
 az role assignment create --assignee-object-id $teardownPrincipal --assignee-principal-type ServicePrincipal --role "Storage Blob Data Contributor" --scope $containerScope -o none
 Assert-Success "creating the teardown storage blob contributor assignment failed"
 
+#Lock the identity group so the pipeline identities cannot be deleted by accident
+#Remove before a deliberate teardown of the identities: az lock delete --name lock-asip-identity --resource-group $rg
+az lock create --name lock-asip-identity --lock-type CanNotDelete --resource-group $rg -o none
+Assert-Success "creating the identity group lock failed"
+
 #Plan client id copy to clipboard only, paste it into the repo secret AZURE_CLIENT_ID
 az identity show --name $planIdentity --resource-group $rg --query clientId -o tsv | Set-Clipboard
 Assert-Success "copying the plan client id failed"
