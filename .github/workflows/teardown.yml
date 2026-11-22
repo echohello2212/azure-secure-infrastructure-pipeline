@@ -1,0 +1,136 @@
+name: Teardown
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: What to tear down
+        type: choice
+        options:
+          - connect compute
+          - full infrastructure
+      confirm:
+        description: Type destroy and the scope
+        type: string
+        required: true
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+  
+jobs:
+  checks:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: confirm phrase matches scope
+        env:
+          confirm: ${{ inputs.confirm }}
+          scope: ${{ inputs.scope }}
+        shell: bash
+        run: |
+          if [ "destroy $scope" != "$confirm" ]; then
+            echo "Confirmation failed, expected $root but got $confirm"
+            exit 1
+          fi
+
+  teardown:
+    needs: checks
+    runs-on: ubuntu-26.04
+    environment: teardown
+    timeout-minutes: 75
+    env:
+        TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        TF_VAR_location: ${{ secrets.ASIP_LOCATION }}
+        TF_VAR_admin_ip: ${{ secrets.ASIP_ADMIN_IP }}
+        TF_VAR_ssh_public_key: ${{ secrets.ASIP_SSH_PUBLIC_KEY }}
+        TF_VAR_sql_admin_object_id: ${{ secrets.ASIP_SQL_ADMIN_OBJECT_ID }}
+    steps:
+  
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: remove prevent_destroy guards
+        if: inputs.scope == 'full infrastructure'
+        shell: bash
+        run: |
+          find . -name '*.tf' -exec sed -i 's/prevent_destroy *= *true/prevent_destroy = false/' {} +
+          git diff --stat
+          if grep -rqE 'prevent_destroy *= *true' --include='*.tf' .; then
+            echo "a prevent_destroy guard survived the flip" >&2
+            exit 1
+          fi
+
+      - name: Azure login
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.16.5
+
+      - name: destroy connectivity
+        id: connectivity
+        continue-on-error: true
+        working-directory: connectivity
+        shell: bash
+        run: |
+          terraform init -input=false
+          terraform destroy -auto-approve -input=false -lock-timeout=20m
+
+      - name: destroy compute
+        id: compute
+        continue-on-error: true
+        working-directory: compute
+        shell: bash
+        run: |
+          terraform init -input=false
+          terraform destroy -auto-approve -input=false -lock-timeout=20m
+
+      - name: destroy datastores
+        if: ${{ inputs.scope == 'full infrastructure' }}
+        id: datastores
+        continue-on-error: true
+        working-directory: datastores
+        shell: bash
+        run: |
+          terraform init -input=false
+          terraform destroy -auto-approve -input=false -lock-timeout=10m
+
+      - name: destroy network
+        if: ${{ inputs.scope == 'full infrastructure'}}
+        id: network
+        continue-on-error: true
+        working-directory: network
+        shell: bash
+        run: |
+          terraform init -input=false
+          terraform destroy -auto-approve -input=false -lock-timeout=10m
+
+      - name: teardown result
+        if: always()
+        env:
+          connectivity: ${{ steps.connectivity.outcome }}
+          compute: ${{ steps.compute.outcome }}
+          datastores: ${{ steps.datastores.outcome }}
+          network: ${{ steps.network.outcome }}
+        shell: bash
+        run: |
+          failed=""
+          for i in connectivity compute datastores network; do
+              echo "$i: ${!i}"
+              if [ "${!i}" = "failure" ];  then
+                failed="$failed $i"
+              fi
+          done
+          if [ -n "$failed" ]; then
+            echo "teardown failed for: $failed" >&2
+            exit 1
+          fi

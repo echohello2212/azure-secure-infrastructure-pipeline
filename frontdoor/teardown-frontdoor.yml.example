@@ -1,0 +1,32 @@
+
+      - name: destroy frontdoor
+        id: frontdoor
+        continue-on-error: true
+        working-directory: frontdoor
+        shell: bash
+        run: |
+          terraform init -input=false
+          terraform destroy -auto-approve -input=false -lock-timeout=7m
+
+
+      - name: teardown result
+        if: always()
+        env:
+          frontdoor: ${{ steps.frontdoor.outcome }}
+          connectivity: ${{ steps.connectivity.outcome }}
+          compute: ${{ steps.compute.outcome }}
+          datastores: ${{ steps.datastores.outcome }}
+          network: ${{ steps.network.outcome }}
+        shell: bash
+        run: |
+          failed=""
+          for i in frontdoor connectivity compute datastores network; do
+              echo "$i: ${!i}"
+              if [ "${!i}" = "failure" ];  then
+                failed="$failed $i"
+              fi
+          done
+          if [ -n "$failed" ]; then
+            echo "teardown failed for: $failed" >&2
+            exit 1
+          fi
