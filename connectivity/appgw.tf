@@ -22,6 +22,8 @@ resource "azurerm_public_ip" "pip_appgw" {
 #Application gateway with WAF, receives HTTP and forwards to the frontend VM
 #Policy ID attaches the WAF policy defined in waf.tf
 resource "azurerm_application_gateway" "appgw_asip" {
+  #checkov:skip=CKV_AZURE_217:http only in the lab, an https listener is a production option
+  #checkov:skip=CKV_AZURE_218:no tls profile because the gateway is http only in the lab
   name                = "appgw-asip"
   location            = data.azurerm_resource_group.rg_asip.location
   resource_group_name = data.azurerm_resource_group.rg_asip.name

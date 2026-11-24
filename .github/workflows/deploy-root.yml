@@ -7,6 +7,10 @@ on:
         type: string
         required: true
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   plan:
     #Secrets mapped to the variables terraform reads

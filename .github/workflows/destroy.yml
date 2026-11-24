@@ -1,4 +1,5 @@
 name: Destroy
+#checkov:skip=CKV_GHA_7:dispatch inputs are operational controls, not build parameters
 on:
   workflow_dispatch:
     inputs:
