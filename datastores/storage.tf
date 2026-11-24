@@ -3,6 +3,8 @@ resource "azurerm_storage_account" "sa_asip" {
   #checkov:skip=CKV_AZURE_33:no queue service is used
   #checkov:skip=CKV_AZURE_206:lrs is enough for the lab, geo-redundant storage is a production option
   #checkov:skip=CKV2_AZURE_1:platform-managed keys for the lab, customer keys not required
+  #checkov:skip=CKV2_AZURE_18:platform-managed keys for the lab, customer keys not required
+  #checkov:skip=CKV2_AZURE_8:not an activity-log store, container is private and public access is denied
   name                             = "asipbackendstorageacc11"
   resource_group_name              = data.azurerm_resource_group.rg_asip.name
   location                         = data.azurerm_resource_group.rg_asip.location
@@ -13,6 +15,7 @@ resource "azurerm_storage_account" "sa_asip" {
   allow_nested_items_to_be_public  = false
   shared_access_key_enabled        = false
   cross_tenant_replication_enabled = false
+  https_traffic_only_enabled       = true
 
   #Soft delete and versioning so deleted or overwritten data can be recovered
   blob_properties {
