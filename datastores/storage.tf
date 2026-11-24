@@ -1,5 +1,8 @@
 #Long term data store. Hardened: no public access by default, no shared keys, no anonymous containers
 resource "azurerm_storage_account" "sa_asip" {
+  #checkov:skip=CKV_AZURE_33:no queue service is used
+  #checkov:skip=CKV_AZURE_206:lrs is enough for the lab, geo-redundant storage is a production option
+  #checkov:skip=CKV2_AZURE_1:platform-managed keys for the lab, customer keys not required
   name                             = "asipbackendstorageacc11"
   resource_group_name              = data.azurerm_resource_group.rg_asip.name
   location                         = data.azurerm_resource_group.rg_asip.location
@@ -57,6 +60,7 @@ resource "azurerm_private_endpoint" "pe_blob" {
 }
 #Private container for backend documents, No public access
 resource "azurerm_storage_container" "blob_asip" {
+  #checkov:skip=CKV2_AZURE_21:blob read logging not needed at lab scale
   name                  = "blob-asip"
   storage_account_id    = azurerm_storage_account.sa_asip.id
   container_access_type = "private"

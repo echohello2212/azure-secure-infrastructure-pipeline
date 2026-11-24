@@ -55,13 +55,14 @@ resource "azurerm_network_interface" "backend" {
 #Frontend VMs, individual names from local.frontend_vms
 #Cloud-init file starts web server on port 80
 resource "azurerm_linux_virtual_machine" "frontend" {
-  for_each            = local.frontend_vms
-  name                = each.key
-  location            = data.azurerm_resource_group.rg.location
-  resource_group_name = data.azurerm_resource_group.rg.name
-  size                = var.vm_size
-  admin_username      = var.admin_username
-  custom_data         = base64encode(file("${path.module}/cloud-init-frontend.yaml"))
+  for_each                   = local.frontend_vms
+  name                       = each.key
+  location                   = data.azurerm_resource_group.rg.location
+  resource_group_name        = data.azurerm_resource_group.rg.name
+  size                       = var.vm_size
+  admin_username             = var.admin_username
+  custom_data                = base64encode(file("${path.module}/cloud-init-frontend.yaml"))
+  allow_extension_operations = false
 
   #Key login only
   disable_password_authentication = true
@@ -90,12 +91,13 @@ resource "azurerm_linux_virtual_machine" "frontend" {
 
 #Backend VMs, individual names from local.backend_vms
 resource "azurerm_linux_virtual_machine" "backend" {
-  for_each            = local.backend_vms
-  name                = each.key
-  location            = data.azurerm_resource_group.rg.location
-  resource_group_name = data.azurerm_resource_group.rg.name
-  size                = var.vm_size
-  admin_username      = var.admin_username
+  for_each                   = local.backend_vms
+  name                       = each.key
+  location                   = data.azurerm_resource_group.rg.location
+  resource_group_name        = data.azurerm_resource_group.rg.name
+  size                       = var.vm_size
+  admin_username             = var.admin_username
+  allow_extension_operations = false
 
   #Key login only
   disable_password_authentication = true
