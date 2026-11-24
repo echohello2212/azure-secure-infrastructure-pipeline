@@ -5,6 +5,7 @@ resource "azurerm_storage_account" "sa_asip" {
   #checkov:skip=CKV2_AZURE_1:platform-managed keys for the lab, customer keys not required
   #checkov:skip=CKV2_AZURE_18:platform-managed keys for the lab, customer keys not required
   #checkov:skip=CKV2_AZURE_8:not an activity-log store, container is private and public access is denied
+  #checkov:skip=CKV_AZURE_3:secure transfer enabled via https_traffic_only_enabled, checkov checks the legacy attribute name
   name                             = "asipbackendstorageacc11"
   resource_group_name              = data.azurerm_resource_group.rg_asip.name
   location                         = data.azurerm_resource_group.rg_asip.location

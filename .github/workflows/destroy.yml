@@ -80,10 +80,12 @@ jobs:
     - name: plan summary
       if: always()
       run: |
-        echo '### Terraform Destroy Plan' >> "$GITHUB_STEP_SUMMARY"
-        echo '```' >> "$GITHUB_STEP_SUMMARY"
-        cat plan.txt >> "$GITHUB_STEP_SUMMARY"
-        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        {
+          echo '### Terraform Destroy Plan'
+          echo '```'
+          cat plan.txt
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
 
 
   destroy-apply:
