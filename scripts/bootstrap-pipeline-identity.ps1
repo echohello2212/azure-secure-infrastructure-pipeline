@@ -131,6 +131,10 @@ Assert-Success "creating the teardown contributor assignment on rg-asip failed"
 az role assignment create --assignee-object-id $teardownPrincipal --assignee-principal-type ServicePrincipal --role "Storage Blob Data Contributor" --scope $containerScope -o none
 Assert-Success "creating the teardown storage blob contributor assignment failed"
 
+#Security admin on the subscription, to teardown defender.tf
+az role assignment create --assignee-object-id $teardownPrincipal --assignee-principal-type ServicePrincipal --role "Security Admin" --scope $subscriptionScope -o none
+Assert-Success "creating the teardown security admin assignment on the subscription failed"
+
 #Lock the identity group so the pipeline identities cannot be deleted by accident
 #Remove before a deliberate teardown of the identities: az lock delete --name lock-asip-identity --resource-group $rg
 az lock create --name lock-asip-identity --lock-type CanNotDelete --resource-group $rg -o none
