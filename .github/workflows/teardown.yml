@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           if [ "destroy $scope" != "$confirm" ]; then
-            echo "Confirmation failed, expected $root but got $confirm"
+            echo "Confirmation failed, expected destroy $scope but got $confirm"
             exit 1
           fi
 
