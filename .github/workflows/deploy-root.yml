@@ -73,7 +73,7 @@ jobs:
       TF_VAR_sql_admin_object_id: ${{ secrets.ASIP_SQL_ADMIN_OBJECT_ID }}
       TF_VAR_ssh_public_key: ${{ secrets.ASIP_SSH_PUBLIC_KEY }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: 70
     defaults:
       run:
         working-directory: ${{ inputs.root }}
@@ -100,7 +100,7 @@ jobs:
         run: terraform init -input=false
 
       - name: terraform plan -out
-        run: terraform plan -out=tfplan -input=false -lock-timeout=5m
+        run: terraform plan -out=tfplan -input=false -lock-timeout=10m
 
       - name: terraform apply plan
-        run: terraform apply -input=false -lock-timeout=5m tfplan
+        run: terraform apply -input=false -lock-timeout=60m tfplan
