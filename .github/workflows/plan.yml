@@ -3,6 +3,9 @@ on:
   pull_request:
     branches:
       - main
+
+  workflow_dispatch:
+
 #id-token lets this job request the cloud login token, read-only otherwise
 permissions:
   contents: read
@@ -16,6 +19,7 @@ jobs:
       TF_VAR_location: ${{ secrets.ASIP_LOCATION }}
       TF_VAR_admin_ip: ${{ secrets.ASIP_ADMIN_IP }}
       TF_VAR_sql_admin_object_id: ${{ secrets.ASIP_SQL_ADMIN_OBJECT_ID }}
+      TF_VAR_ssh_public_key: ${{ secrets.ASIP_SSH_PUBLIC_KEY }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     defaults:
@@ -23,11 +27,13 @@ jobs:
         working-directory: ${{ matrix.root }}
     strategy:
       fail-fast: false
-      #Only long-lived roots, others join later
+      #All roots, full drift sweep
       matrix:
         root: [
           "network",
-          "datastores"
+          "datastores",
+          "compute",
+          "connectivity"
         ]
 
     steps:
@@ -54,6 +60,6 @@ jobs:
         run: terraform init -input=false
 
       #Waits up to 5 minutes for the state lock, then fails
+      #Detailed exit code to signal planned changes to state
       - name: terraform plan
-        run: terraform plan -no-color -input=false -lock-timeout=5m
-
+        run: terraform plan -no-color -input=false -lock-timeout=5m ${{ github.event_name != 'pull_request' && '-detailed-exitcode' || '' }}
