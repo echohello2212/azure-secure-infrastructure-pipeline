@@ -10,8 +10,10 @@ Built for ease: copy, paste and resume. Everything is in order, so you can pick 
 - [Variables and secrets](#variables-and-secrets)
 - [Bootstrap the identities](#bootstrap-the-identities)
 - [Running the workflows](#running-the-workflows)
+- [Security scanning](#security-scanning)
 - [Who holds what](#who-holds-what)
 - [When a run is stuck](#when-a-run-is-stuck)
+- [Partial teardown recovery](#partial-teardown-recovery)
 - [Azure checks](#azure-checks)
 - [Verify the gateway](#verify-the-gateway)
 - [Verify the endpoints](#verify-the-endpoints)
@@ -43,6 +45,7 @@ Only the [bootstrap scripts](#bootstrap-the-identities) need Owner. Everything e
 - **Keep state out of the repo.** State and saved plans can contain secrets.
 - **A second `plan` should say `No changes`.** Anything else is drift or a bug.
 - **Costly resources bill while they exist.** The gateway, Bastion and VMs cost money every hour they are left running, so destroy them the same day.
+- **Don't create or delete resources by hand.** Anything made or removed outside Terraform drifts: it is not in state, so `apply` and `destroy` ignore it, and it blocks the next `apply` with "already exists." If you must, import it or clean it up before the next deploy, see [Partial teardown recovery](#partial-teardown-recovery).
 
 ## Order of operations
 
@@ -62,7 +65,7 @@ Do steps 3-5 from GitHub with the [Deploy workflow](#running-the-workflows) (`fu
 
 `frontdoor/` is not part of the order. It is validated only, see [Front Door](#front-door).
 
-**Teardown**
+**Teardown of the disposable roots**
 
 1. Clear the temporary rules and `apply` in `network/`. If you switched on [temporary storage access](#temporary-storage-access), switch it off and `apply` in `datastores/`.
 2. `connectivity/` destroy first (the gateway takes 10-20 minutes).
@@ -76,6 +79,10 @@ az resource list --resource-group rg-asip --output table
 Do steps 2-3 with the [Destroy workflow](#running-the-workflows), or locally with `terraform destroy` in each root.
 
 `network/` and `datastores/` stay deployed. The VNet, subnets, NSGs, DNS zones, workspace, storage account, SQL server and database, endpoints and Defender settings cost little (the serverless database pauses when idle), and the ones that hold data are protected on purpose.
+
+**Full teardown**
+
+To take the whole environment down, including the long-lived roots, use the `teardown` workflow (Actions, Teardown). It destroys every root in dependency order, strips `prevent_destroy` for the run, and re-signs in before each root so the run never outlives its token. If it stops part-way, do not just re-run it, see [Partial teardown recovery](#partial-teardown-recovery).
 
 ## Variables and secrets
 
@@ -93,6 +100,8 @@ Nothing environment-specific is stored in the repo. Locally the values are envir
 
 `AZURE_CLIENT_ID` exists twice. The repo secret is the plan identity's client ID. The secret in the `deploy` environment is the deploy identity's, and it overrides the repo secret for jobs that use that environment. Both are copied to the clipboard and pasted into GitHub, never printed.
 
+`ASIP_SSH_PUBLIC_KEY` has to be a **repo-level** secret, not only an environment one, so the read-only `plan` identity can plan `compute/` on the all-roots drift sweep (it runs with no environment).
+
 `sql_admin_login` has a default (the group's name), so it needs no value.
 
 `ASIP_GITHUB_REPO` is a local-only input for the bootstrap script, set to `owner/repo`. It is not a Terraform variable or a GitHub secret. The script uses it to ask GitHub for the repo's OIDC subject prefix, so nothing hardcodes an ID.
@@ -102,7 +111,7 @@ Nothing environment-specific is stored in the repo. Locally the values are envir
 ```powershell
 $env:TF_VAR_subscription_id = (az account show --query id -o tsv)
 $env:TF_VAR_location = "<azure-region>"
-$env:TF_VAR_admin_ip = "<your-public-ip>"
+$env:TF_VAR_admin_ip = (curl.exe -s https://api.ipify.org)
 $env:TF_VAR_ssh_public_key = (Get-Content "<path-to-public-key>")
 $env:TF_VAR_sql_admin_object_id = (az ad group show --group sg-asip-sql-admins --query id -o tsv)
 ```
@@ -112,7 +121,7 @@ $env:TF_VAR_sql_admin_object_id = (az ad group show --group sg-asip-sql-admins -
 ```bash
 export TF_VAR_subscription_id=$(az account show --query id -o tsv)
 export TF_VAR_location="<azure-region>"
-export TF_VAR_admin_ip="<your-public-ip>"
+export TF_VAR_admin_ip=$(curl -s https://api.ipify.org)
 export TF_VAR_ssh_public_key=$(cat "<path-to-public-key>")
 export TF_VAR_sql_admin_object_id=$(az ad group show --group sg-asip-sql-admins --query id -o tsv)
 ```
@@ -121,7 +130,7 @@ export TF_VAR_sql_admin_object_id=$(az ad group show --group sg-asip-sql-admins 
 
 `TF_VAR_admin_ip` is the public IP that Bastion, the temporary gateway rule and the storage firewall accept.
 
-- Find yours with any "what is my IP" site, or `curl https://api.ipify.org`.
+- Find yours with any "what is my IP" site, or `curl.exe -s https://api.ipify.org` (use `curl.exe` in PowerShell, `curl` is an alias).
 - **It might change** (router restart, new network, VPN). If Bastion or the gateway stops answering, update the variable and re-apply `network/` (and `datastores/` if storage access is on). Update the `ASIP_ADMIN_IP` secret too, or the pipeline keeps the old value.
 - Never commit the real value.
 
@@ -170,7 +179,33 @@ A push to `main` that changes `network/` or `datastores/` also runs automaticall
 
 Each root plans first. Read the plan on the run page, then approve in the `deploy` environment. Nothing is applied before that. Pull requests get a read-only plan and a validate run automatically.
 
-**Destroy:** Actions, Destroy, Run workflow. Pick `connectivity`, `compute` or `frontdoor`, and type the same name as confirmation. A mismatch stops at the first job. Read the destroy plan on the run page, then approve. Run `connectivity` before `compute`. The long-lived roots are not offered, destroy those locally after [removing prevent_destroy](#removing-prevent_destroy).
+**Plan:** runs automatically on pull requests (a read-only plan of the long-lived roots). Run it manually (Actions, Plan, Run workflow) to sweep every root and surface drift — it fails the job when a root has drifted (`-detailed-exitcode`). The sweep reads live infrastructure, so it only means something against a deployed environment, see the note at the end of this section.
+
+**Destroy:** Actions, Destroy, Run workflow. Pick `connectivity`, `compute` or `frontdoor`, and type the same name as confirmation. A mismatch stops at the first job. Read the destroy plan on the run page, then approve. Run `connectivity` before `compute`. The long-lived roots are not offered, destroy those with the `teardown` workflow or locally after [removing prevent_destroy](#removing-prevent_destroy).
+
+**Teardown:** Actions, Teardown, Run workflow. Pick the scope and type `destroy <scope>` to confirm. It destroys the whole environment in dependency order, strips `prevent_destroy` for the run, and re-signs in before each root. Each root's destroy is independent and reported, so one failure does not hide the others. A part-way failure needs reconciling, see [Partial teardown recovery](#partial-teardown-recovery).
+
+**A red check is not automatically a bad change.** The plan and drift checks read live infrastructure, so a failure can mean the environment is incomplete — roots not deployed, a dependency missing — rather than the code being wrong. Against a torn-down environment every root except `network` fails at the data-source lookup, because what it reads is not there yet. Before merging on red, find out *why* it failed and weigh the change's scope of impact: a missing-environment failure is not the same as a broken change.
+
+## Security scanning
+
+checkov and actionlint run in `ci` on every pull request. Run them locally before pushing:
+
+```
+checkov -d . --quiet
+actionlint
+```
+
+- checkov auto-detects the Terraform and the workflows; no `--framework` needed.
+- actionlint reads `.github/workflows/` and runs shellcheck on `run` blocks.
+
+**Local and CI versions drift.** CI may run a newer checkov than your machine and flag settings your local run passed. The CI result is the gate — fix or document against it, not against a clean local pass. `pip install -U checkov` narrows the gap, but treat CI as the source of truth.
+
+To document a finding instead of fixing it, put the skip **inside** the resource block (checkov only honours it there):
+
+```
+  #checkov:skip=CKV_AZURE_XXX:reason it is acceptable here
+```
 
 ## Who holds what
 
@@ -182,7 +217,10 @@ What each identity should hold. Check it when a run fails with `AuthorizationFai
 | plan | Security Reader | Subscription |
 | plan | Storage Blob Data Contributor | State container |
 | deploy | Contributor | `rg-asip` |
+| deploy | Security Admin | Subscription |
 | deploy | Storage Blob Data Contributor | State container |
+
+Security Admin on the subscription lets the deploy identity apply the subscription-scoped Defender plan settings; the plan identity gets the read-only Security Reader for the same reason. A missing Security Admin shows up as a `403` on `Microsoft.Security/pricings` during a `network` apply or destroy.
 
 To check, in your own terminal (nothing goes into a workflow or a log). Load the values into variables and never print them:
 
@@ -205,6 +243,29 @@ The variables only exist in that terminal session.
 - **Waiting for approval.** A run at the approval prompt holds the concurrency group, so every other deploy or destroy queues behind it. Approve or reject it. Rejecting is cleaner than cancelling.
 - **Do not cancel during an apply or destroy.** It can leave resources half-changed and the state locked.
 - **State locked after a cancelled or failed run.** Make sure no run is still active, then in the root's folder: `terraform force-unlock <lock-id>`. The lock ID is in the error message. Then run `plan` and read it before doing anything else.
+- **A teardown fails part-way with `AADSTS700024` (assertion not within its valid time range).** The OIDC sign-in token is short-lived, and a single job that destroys every root in sequence can outlive it. This is the auth token, not the job timeout. The workflow re-signs in before each root to avoid it; if it still trips, finish the teardown locally (your own `az login` refreshes normally), then see [Partial teardown recovery](#partial-teardown-recovery).
+- **A subnet delete fails with `InUseSubnetCannotBeDeleted`.** Something still occupies the subnet, usually a private endpoint from `datastores/` that was not destroyed. Destroy `datastores/` before `network/`. See [Partial teardown recovery](#partial-teardown-recovery).
+
+## Partial teardown recovery
+
+A teardown can stop half-way: a cancelled run, an expired token, a dependency that blocked a delete. The environment is then part up, part down, and state no longer matches Azure. Do not just re-run it — reconcile first.
+
+1. List what is actually in Azure:
+
+```
+az resource list --resource-group rg-asip --output table
+```
+
+2. Compare it to each root's state (`terraform -chdir=<root> state list`), then per mismatch:
+   - **In Azure but not in state** (an orphan — often a private endpoint left in a subnet, or a resource an interrupted apply created): either `terraform -chdir=<root> import <address> <id>` to bring it under Terraform, or delete it via the CLI.
+   - **In state but not in Azure:** `terraform -chdir=<root> state rm <address>`.
+3. Once state matches reality, `terraform -chdir=<root> destroy` the root for a clean teardown.
+
+Order still matters: destroy `datastores/` before `network/`, or the private endpoints hold the endpoints subnet open and the subnet delete fails with `InUseSubnetCannotBeDeleted`.
+
+**Anything created or deleted by hand drifts.** It is outside state, so `apply` and `destroy` ignore it. Remove it manually (or import it) **before the next deploy**, or the next `apply` fails with "already exists." The private DNS zones are the usual culprit: recreate them to break a data-source lookup deadlock, and they must be deleted again before the rebuild.
+
+**A guarded resource stops a local destroy.** The `teardown` workflow strips `prevent_destroy` automatically; a local `terraform destroy` does not, so set the flag to `false` in code first, see [Removing prevent_destroy](#removing-prevent_destroy).
 
 ## Azure checks
 
@@ -363,9 +424,9 @@ Five resources hold data or the audit trail and are protected on purpose:
 | SQL server | `datastores/sql.tf` |
 | SQL database | `datastores/sql.tf` |
 
-To destroy one: set `prevent_destroy = false` in its `lifecycle` block, then run the destroy. Put it back to `true` after a rebuild. A parent takes its children with it, so remove the flag on both the storage account and its container, or on both the SQL server and its database.
+The `teardown` workflow strips these automatically for its run, so this is only needed for a **local** destroy. To destroy one by hand: set `prevent_destroy = false` in its `lifecycle` block, then run the destroy. Put it back to `true` after a rebuild. A parent takes its children with it, so remove the flag on both the storage account and its container, or on both the SQL server and its database.
 
-`prevent_destroy` only guards Terraform. Deleting in the portal bypasses it.
+`prevent_destroy` only guards Terraform, including a local `terraform destroy`. Deleting in the portal bypasses it.
 
 ## Querying the logs
 
